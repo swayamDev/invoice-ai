@@ -1,8 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { buildInvoiceEmailHtml, buildInvoiceEmailText } from '@/lib/email-templates'
 
 export async function POST(req: NextRequest) {
   try {
-    const { invoiceId, to, subject, body } = await req.json()
+    const payload = await req.json()
+    const {
+      type = 'invoice',
+      to,
+      subject,
+      body,
+      invoiceNumber,
+      invoiceId,
+      clientName,
+      clientEmail,
+      senderName,
+      senderCompany,
+      senderEmail,
+      senderAddress,
+      issueDate,
+      dueDate,
+      currency = 'USD',
+      subtotal = 0,
+      taxRate = 0,
+      taxAmount = 0,
+      discount = 0,
+      total = 0,
+      items = [],
+      notes,
+    } = payload
 
     if (!to || !subject) {
       return NextResponse.json({ error: 'Missing recipient or subject' }, { status: 400 })
@@ -10,40 +35,78 @@ export async function POST(req: NextRequest) {
 
     const resendKey = process.env.RESEND_API_KEY
     if (!resendKey) {
-      // Log and return success — no email sent but invoice is saved
-      console.log(`[Invoice Send] Would email ${to}: "${subject}"`)
-      return NextResponse.json({ success: true, note: 'Email not sent — no RESEND_API_KEY configured' })
+      console.log(`[Invoice Send] No RESEND_API_KEY — would email ${to}: "${subject}"`)
+      return NextResponse.json({
+        success: true,
+        note: 'Invoice saved. Email not sent — configure RESEND_API_KEY to enable email sending.',
+      })
     }
 
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'invoices@yourdomain.com'
+    const fromName = senderCompany || senderName || 'Invoice AI'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://invoice-ai.vercel.app'
+
+    const emailData = {
+      type: (type as 'invoice' | 'reminder' | 'receipt'),
+      invoiceNumber: invoiceNumber || 'INV',
+      invoiceId: invoiceId || '',
+      clientName: clientName || to,
+      clientEmail: clientEmail || to,
+      senderName: senderName || fromName,
+      senderCompany,
+      senderEmail: senderEmail || fromEmail,
+      senderAddress,
+      issueDate: issueDate || new Date().toISOString().split('T')[0],
+      dueDate: dueDate || new Date().toISOString().split('T')[0],
+      currency,
+      subtotal,
+      taxRate,
+      taxAmount,
+      discount,
+      total,
+      items,
+      notes,
+      subject,
+      body,
+      appName: 'Invoice AI',
+      appUrl,
+    }
+
+    const htmlContent = buildInvoiceEmailHtml(emailData)
+    const textContent = buildInvoiceEmailText(emailData)
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${resendKey}`,
+        Authorization: `Bearer ${resendKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: fromEmail,
+        from: `${fromName} <${fromEmail}>`,
         to: [to],
         subject,
-        text: body,
-        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-          <pre style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6">${body}</pre>
-          <hr style="border:none;border-top:1px solid #eee;margin:30px 0">
-          <p style="color:#999;font-size:12px">Sent via Invoice AI</p>
-        </div>`,
+        html: htmlContent,
+        text: textContent,
+        tags: [
+          { name: 'type', value: type },
+          { name: 'invoice_number', value: invoiceNumber || 'unknown' },
+        ],
       }),
     })
 
     if (!response.ok) {
       const err = await response.json()
-      throw new Error(err.message || 'Resend error')
+      console.error('[Resend] Error:', err)
+      throw new Error(err.message || `Resend error ${response.status}`)
     }
 
-    return NextResponse.json({ success: true })
+    const result = await response.json()
+    return NextResponse.json({ success: true, messageId: result.id })
   } catch (err) {
-    console.error('Send invoice error:', err)
-    return NextResponse.json({ error: 'Failed to send email' }, { status: 500 })
+    console.error('[Invoice Send] Error:', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to send email' },
+      { status: 500 }
+    )
   }
 }

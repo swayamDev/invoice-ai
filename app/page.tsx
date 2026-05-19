@@ -621,10 +621,16 @@ function Footer() {
             &copy; {new Date().getFullYear()} Invoice AI. All rights reserved.
           </p>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-emerald" />
-            <span className="text-white/30 text-xs">
-              All Systems Operational
-            </span>
+            <div className="w-2 h-2 rounded-full bg-[#FF0A54] animate-pulse" />
+
+            <a
+              href="https://swayam.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/30 text-xs tracking-wide hover:text-[#FF0A54] transition-colors"
+            >
+              Built by Swayam
+            </a>
           </div>
         </div>
       </div>

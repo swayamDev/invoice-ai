@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Syne, Geist_Mono } from "next/font/google";
+
 import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "@/components/ui/sonner";
+
 import "./globals.css";
 
 const inter = Inter({
@@ -23,43 +25,68 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Invoice AI - AI-Powered Invoice Management",
+  title: "Invoice AI",
   description:
-    "Create professional invoices in seconds. Track payments. Automate reminders. All in one place.",
-  generator: "v0.app",
+    "Create professional invoices in seconds. Track payments and automate billing workflows.",
+
+  applicationName: "Invoice AI",
+
   keywords: [
     "invoice",
+    "invoice ai",
     "billing",
-    "AI",
-    "automation",
     "payments",
+    "automation",
     "freelancer",
     "agency",
+    "saas",
   ],
-  authors: [{ name: "Invoice AI" }],
+
+  authors: [
+    {
+      name: "Invoice AI",
+    },
+  ],
+
+  manifest: "/site.webmanifest",
+
   icons: {
     icon: [
       {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
+        url: "/favicon-96x96.png",
+        sizes: "96x96",
+        type: "image/png",
       },
       {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
+        url: "/favicon.svg",
         type: "image/svg+xml",
       },
+      {
+        url: "/favicon.ico",
+      },
     ],
-    apple: "/apple-icon.png",
+
+    apple: [
+      {
+        url: "/apple-touch-icon.png",
+        sizes: "180x180",
+      },
+    ],
+
+    shortcut: ["/favicon.ico"],
+  },
+
+  appleWebApp: {
+    title: "Invoice AI",
+    capable: true,
+    statusBarStyle: "black-translucent",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050505",
   width: "device-width",
   initialScale: 1,
+  themeColor: "#050505",
 };
 
 export default function RootLayout({
@@ -70,10 +97,20 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${syne.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}
+        className={`
+          ${inter.variable}
+          ${syne.variable}
+          ${geistMono.variable}
+          font-sans
+          antialiased
+          bg-background
+          text-foreground
+        `}
       >
         {children}
-        <Toaster />
+
+        <Toaster richColors />
+
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>

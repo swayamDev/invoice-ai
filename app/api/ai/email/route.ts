@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,57 +8,84 @@ export async function POST(req: NextRequest) {
       amount,
       dueDate,
       senderName,
-      type = "invoice",
-    } = await req.json();
+      senderCompany,
+      type = 'invoice',
+    } = await req.json()
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      // Fallback template
-      const isReminder = type === "reminder";
-      return NextResponse.json({
-        subject: isReminder
-          ? `Payment Reminder: ${invoiceNumber} – ${amount}`
-          : `Invoice ${invoiceNumber} – ${amount}`,
-        body: isReminder
-          ? `Dear ${clientName || "Client"},\n\nThis is a friendly reminder that invoice ${invoiceNumber} for ${amount} was due on ${dueDate}.\n\nPlease process payment at your earliest convenience. If you have any questions, don't hesitate to reach out.\n\nBest regards,\n${senderName}`
-          : `Dear ${clientName || "Client"},\n\nPlease find invoice ${invoiceNumber} for ${amount} attached.\n\nPayment is due by ${dueDate}. If you have any questions, please don't hesitate to reach out.\n\nThank you for your business!\n\nBest regards,\n${senderName}`,
-      });
+    const isReminder = type === 'reminder'
+
+    // Always provide a solid fallback
+    const fallback = {
+      subject: isReminder
+        ? `Payment Reminder: ${invoiceNumber} – ${amount} Overdue`
+        : `Invoice ${invoiceNumber} from ${senderCompany || senderName} – ${amount} Due`,
+      body: isReminder
+        ? `Dear ${clientName || 'Valued Client'},\n\nI hope this message finds you well. I'm writing to follow up on invoice ${invoiceNumber} for ${amount}, which was due on ${dueDate}.\n\nCould you please let us know when we can expect payment, or reach out if there are any issues we can help resolve?\n\nThank you for your prompt attention to this matter.\n\nBest regards,\n${senderName || senderCompany}`
+        : `Dear ${clientName || 'Valued Client'},\n\nPlease find invoice ${invoiceNumber} for ${amount} attached to this email.\n\nPayment is due by ${dueDate}. If you have any questions about the services or the invoice, please don't hesitate to get in touch.\n\nThank you for your continued business — it's truly appreciated!\n\nWarm regards,\n${senderName || senderCompany}`,
     }
 
-    const prompt =
-      type === "reminder"
-        ? `Write a polite payment reminder email. Client: ${clientName}. Invoice: ${invoiceNumber}. Amount: ${amount}. Was due: ${dueDate}. Sender: ${senderName}. Return JSON with "subject" and "body". Body: 3-4 sentences. Professional but friendly.`
-        : `Write a professional invoice email. Client: ${clientName}. Invoice: ${invoiceNumber}. Amount: ${amount}. Due: ${dueDate}. From: ${senderName}. Return JSON with "subject" and "body". Body: 3-4 sentences.`;
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json(fallback)
+    }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
+    const prompt = isReminder
+      ? `Write a polite payment reminder email.
+Client name: ${clientName}
+Invoice number: ${invoiceNumber}
+Amount owed: ${amount}
+Original due date: ${dueDate}
+Sender: ${senderName}${senderCompany ? ` at ${senderCompany}` : ''}
+Return JSON: {"subject":"...","body":"..."}`
+      : `Write a professional invoice delivery email.
+Client name: ${clientName}
+Invoice number: ${invoiceNumber}
+Amount: ${amount}
+Due date: ${dueDate}
+From: ${senderName}${senderCompany ? ` at ${senderCompany}` : ''}
+Return JSON: {"subject":"...","body":"..."}`
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: 'gpt-4o-mini',
         max_tokens: 500,
-        system:
-          'You are a professional business email writer. Return only valid JSON with "subject" and "body" keys. No markdown. No extra text.',
-        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a professional business email writer. Return ONLY valid JSON with "subject" and "body" keys. No markdown, no extra text, no code blocks.',
+          },
+          { role: 'user', content: prompt },
+        ],
       }),
-    });
+    })
 
-    const data = await response.json();
-    const text = data.content?.[0]?.text || "{}";
-    const parsed = JSON.parse(text);
+    if (!response.ok) {
+      console.error('[AI Email] OpenAI error:', response.status)
+      return NextResponse.json(fallback)
+    }
 
-    return NextResponse.json({
-      subject: parsed.subject || `Invoice ${invoiceNumber}`,
-      body: parsed.body || "",
-    });
+    const data = await response.json()
+    const raw = data.choices?.[0]?.message?.content || '{}'
+    const text = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
+
+    try {
+      const parsed = JSON.parse(text)
+      return NextResponse.json({
+        subject: parsed.subject || fallback.subject,
+        body: parsed.body || fallback.body,
+      })
+    } catch {
+      return NextResponse.json(fallback)
+    }
   } catch (err) {
-    console.error("AI email error:", err);
-    return NextResponse.json(
-      { error: "Email generation failed" },
-      { status: 500 },
-    );
+    console.error('[AI Email] error:', err)
+    return NextResponse.json({ error: 'Email generation failed' }, { status: 500 })
   }
 }

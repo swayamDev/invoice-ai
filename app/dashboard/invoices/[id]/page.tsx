@@ -121,19 +121,67 @@ export default function InvoiceDetailPage() {
     if (!target) return
     setDownloadingPdf(true)
     try {
-      const element = document.getElementById('invoice-pdf')
-      if (!element) return
       const { default: html2canvas } = await import('html2canvas')
       const { default: jsPDF } = await import('jspdf')
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const w = pdf.internal.pageSize.getWidth()
-      const h = (canvas.height * w) / canvas.width
-      pdf.addImage(imgData, 'PNG', 0, 0, w, h)
+
+      const A4_WIDTH_PX = 794
+      const SCALE = 2
+
+      const source = document.getElementById('invoice-pdf')
+      if (!source) { toast.error('Invoice preview not found'); return }
+
+      // Off-screen container — avoids all scroll/clip issues
+      const container = document.createElement('div')
+      container.style.cssText = [
+        'position:fixed', 'top:-9999px', 'left:-9999px',
+        `width:${A4_WIDTH_PX}px`, 'background:white',
+        'z-index:-1', 'pointer-events:none',
+      ].join(';')
+      document.body.appendChild(container)
+
+      const clone = source.cloneNode(true) as HTMLElement
+      clone.style.cssText = 'width:100%;background:white;border-radius:0;box-shadow:none;overflow:visible;margin:0;padding:0;'
+      container.appendChild(clone)
+
+      await new Promise(r => setTimeout(r, 120))
+
+      const canvas = await html2canvas(container, {
+        scale: SCALE, useCORS: true, backgroundColor: '#ffffff',
+        logging: false, windowWidth: A4_WIDTH_PX, width: A4_WIDTH_PX,
+      })
+
+      document.body.removeChild(container)
+
+      const imgData = canvas.toDataURL('image/png', 1.0)
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
+      const ratio = pageW / (canvas.width / SCALE)
+      const renderedH = (canvas.height / SCALE) * ratio
+
+      if (renderedH <= pageH) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pageW, renderedH)
+      } else {
+        const pageHeightPx = Math.floor(pageH / ratio)
+        let yOffset = 0, page = 0
+        while (yOffset < canvas.height / SCALE) {
+          if (page > 0) pdf.addPage()
+          const sliceH = Math.min(pageHeightPx, canvas.height / SCALE - yOffset)
+          const sliceCanvas = document.createElement('canvas')
+          sliceCanvas.width = canvas.width
+          sliceCanvas.height = sliceH * SCALE
+          const ctx = sliceCanvas.getContext('2d')!
+          ctx.drawImage(canvas, 0, yOffset * SCALE, canvas.width, sliceH * SCALE, 0, 0, canvas.width, sliceH * SCALE)
+          pdf.addImage(sliceCanvas.toDataURL('image/png', 1.0), 'PNG', 0, 0, pageW, sliceH * ratio)
+          yOffset += pageHeightPx
+          page++
+        }
+      }
+
       pdf.save(`${target.invoice_number}.pdf`)
-      toast.success('PDF downloaded')
-    } catch {
+      toast.success('PDF downloaded!')
+    } catch (err) {
+      console.error('PDF error:', err)
       toast.error('Failed to generate PDF')
     } finally {
       setDownloadingPdf(false)
@@ -143,6 +191,7 @@ export default function InvoiceDetailPage() {
   const generateAIEmail = async () => {
     if (!invoice) return
     setGeneratingEmail(true)
+    const isReminder = invoice.status === 'unpaid'
     try {
       const res = await fetch('/api/ai/email', {
         method: 'POST',
@@ -152,8 +201,9 @@ export default function InvoiceDetailPage() {
           invoiceNumber: invoice.invoice_number,
           amount: fmt(invoice.total, invoice.currency),
           dueDate: fmtDate(invoice.due_date),
-          senderName: invoice.sender_name || invoice.sender_company,
-          type: 'invoice',
+          senderName: invoice.sender_name,
+          senderCompany: invoice.sender_company,
+          type: isReminder ? 'reminder' : 'invoice',
         }),
       })
       const data = await res.json()
@@ -161,17 +211,21 @@ export default function InvoiceDetailPage() {
       if (data.body) setEmailBody(data.body)
       toast.success('Email generated with AI')
     } catch {
-      setEmailSubject(`Invoice ${invoice.invoice_number} – ${fmt(invoice.total, invoice.currency)}`)
-      setEmailBody(`Dear ${invoice.clients?.name || 'Client'},
-
-Please find your invoice ${invoice.invoice_number} for ${fmt(invoice.total, invoice.currency)} attached.
-
-Payment is due by ${fmtDate(invoice.due_date)}.
-
-Thank you for your business!
-
-Best regards,
-${invoice.sender_name || invoice.sender_company || 'Invoice AI'}`)
+      const name = invoice.clients?.name || 'Client'
+      const num = invoice.invoice_number
+      const amount = fmt(invoice.total, invoice.currency)
+      const due = fmtDate(invoice.due_date)
+      const from = invoice.sender_company || invoice.sender_name || 'Invoice AI'
+      setEmailSubject(
+        isReminder
+          ? `Payment Reminder: ${num} – ${amount} Overdue`
+          : `Invoice ${num} from ${invoice.sender_company || invoice.sender_name} – ${amount} Due`
+      )
+      setEmailBody(
+        isReminder
+          ? `Dear ${name},\n\nI hope this message finds you well. I'm writing to follow up on invoice ${num} for ${amount}, which was due on ${due}.\n\nCould you please let us know when we can expect payment?\n\nThank you,\n${from}`
+          : `Dear ${name},\n\nPlease find your invoice ${num} for ${amount} detailed below.\n\nPayment is due by ${due}. If you have any questions, please do not hesitate to reach out.\n\nThank you for your business!\n\nBest regards,\n${from}`
+      )
       toast.success('Email template ready')
     } finally {
       setGeneratingEmail(false)
@@ -179,23 +233,53 @@ ${invoice.sender_name || invoice.sender_company || 'Invoice AI'}`)
   }
 
   const handleSend = async () => {
+    if (!invoice) return
     setActioning(true)
     try {
-      await fetch('/api/invoices/send', {
+      const items = invoice.invoice_items || []
+      const res = await fetch('/api/invoices/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoiceId: invoice?.id,
-          to: invoice?.clients?.email,
+          type: invoice.status === 'unpaid' ? 'reminder' : 'invoice',
+          invoiceId: invoice.id,
+          to: invoice.clients?.email,
           subject: emailSubject,
           body: emailBody,
+          invoiceNumber: invoice.invoice_number,
+          clientName: invoice.clients?.name,
+          clientEmail: invoice.clients?.email,
+          senderName: invoice.sender_name,
+          senderCompany: invoice.sender_company,
+          senderEmail: invoice.sender_email,
+          senderAddress: invoice.sender_address,
+          issueDate: invoice.issue_date,
+          dueDate: invoice.due_date,
+          currency: invoice.currency,
+          subtotal: invoice.subtotal,
+          taxRate: invoice.tax_rate,
+          taxAmount: invoice.tax_amount,
+          discount: invoice.discount,
+          total: invoice.total,
+          items: items.map((i: LineItem) => ({
+            description: i.description,
+            quantity: i.quantity,
+            rate: i.rate,
+            amount: i.amount,
+          })),
+          notes: invoice.notes,
         }),
       })
-      if (invoice?.status === 'draft') await updateStatus('unpaid')
-      toast.success('Invoice sent!')
+      const result = await res.json()
+      if (invoice.status === 'draft') await updateStatus('unpaid')
+      if (result.note) {
+        toast.success('Invoice saved! Configure RESEND_API_KEY to send emails.')
+      } else {
+        toast.success('Invoice sent!')
+      }
       setSendDialog(false)
     } catch {
-      toast.error('Send failed — but you can download the PDF and send manually')
+      toast.error('Send failed — download the PDF and send manually')
     } finally {
       setActioning(false)
     }
@@ -215,16 +299,41 @@ ${invoice.sender_name || invoice.sender_company || 'Invoice AI'}`)
     if (!user) return
     const { count } = await supabase.from('invoices').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
     const num = String((count || 0) + 1).padStart(3, '0')
-    const { error } = await supabase.from('invoices').insert({
-      ...invoice,
-      id: undefined,
+    const { data: newInv, error } = await supabase.from('invoices').insert({
+      user_id: user.id,
+      client_id: invoice.client_id,
       invoice_number: `INV-${new Date().getFullYear()}-${num}`,
       status: 'draft',
       issue_date: new Date().toISOString().split('T')[0],
-      created_at: undefined,
-      updated_at: undefined,
-    })
+      due_date: invoice.due_date,
+      currency: invoice.currency,
+      subtotal: invoice.subtotal,
+      tax_rate: invoice.tax_rate,
+      tax_amount: invoice.tax_amount,
+      discount: invoice.discount,
+      total: invoice.total,
+      notes: invoice.notes,
+      terms: invoice.terms,
+      sender_name: invoice.sender_name,
+      sender_email: invoice.sender_email,
+      sender_company: invoice.sender_company,
+      sender_address: invoice.sender_address,
+      sender_logo_url: invoice.sender_logo_url,
+    }).select().single()
     if (error) { toast.error('Failed to duplicate'); return }
+    // Also duplicate line items
+    const items = invoice.invoice_items || []
+    if (items.length > 0 && newInv) {
+      await supabase.from('invoice_items').insert(
+        items.map((item: LineItem) => ({
+          invoice_id: newInv.id,
+          description: item.description,
+          quantity: item.quantity,
+          rate: item.rate,
+          amount: item.amount,
+        }))
+      )
+    }
     toast.success('Duplicated as draft')
     router.push('/dashboard/invoices')
   }

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   RiAddLine,
@@ -196,8 +196,9 @@ function InvoicePDFPreview({
   )
 }
 
-export default function NewInvoice() {
+function NewInvoiceInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   const [clients, setClients] = useState<Client[]>([])
@@ -251,6 +252,38 @@ export default function NewInvoice() {
         .eq('user_id', user.id)
       const num = String((count || 0) + 1).padStart(3, '0')
       setInvoiceNumber(`INV-${new Date().getFullYear()}-${num}`)
+
+      // Handle AI param — auto-generate line items from description
+      const aiText = searchParams.get('ai')
+      if (aiText) {
+        try {
+          const res = await fetch('/api/ai/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'invoice', input: aiText }),
+          })
+          const { output } = await res.json()
+          if (output) {
+            // Strip markdown code fences if model wraps JSON in ```json ... ```
+            const clean = output.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
+            const parsed = JSON.parse(clean)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setLineItems(
+                parsed.map((item: { description: string; quantity: number; rate: number }, idx: number) => ({
+                  id: `ai-${idx}`,
+                  description: item.description || '',
+                  quantity: Number(item.quantity) || 1,
+                  rate: Number(item.rate) || 0,
+                }))
+              )
+              toast.success('AI generated your line items!')
+            }
+          }
+        } catch (e) {
+          console.error('AI parse error:', e)
+          // Silently fail — user can fill manually
+        }
+      }
     }
     load()
   }, [])
@@ -364,7 +397,8 @@ export default function NewInvoice() {
           invoiceNumber,
           amount: fmt(total, currency),
           dueDate: formatDate(dueDate),
-          senderName: sender.name || sender.company,
+          senderName: sender.name,
+          senderCompany: sender.company,
           type: 'invoice',
         }),
       })
@@ -394,23 +428,54 @@ ${sender.name || sender.company}`)
     const inv = await saveInvoice('unpaid')
     if (!inv) return
 
-    // Attempt email send
+    // Attempt email send with full invoice data for rich HTML template
     try {
-      await fetch('/api/invoices/send', {
+      const res = await fetch('/api/invoices/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: 'invoice',
           invoiceId: inv.id,
           to: selectedClient?.email,
           subject: emailSubject,
           body: emailBody,
+          invoiceNumber,
+          clientName: selectedClient?.name,
+          clientEmail: selectedClient?.email,
+          senderName: sender.name,
+          senderCompany: sender.company,
+          senderEmail: sender.email,
+          senderAddress: sender.address,
+          issueDate,
+          dueDate,
+          currency,
+          subtotal,
+          taxRate,
+          taxAmount: taxAmt,
+          discount: 0,
+          total,
+          items: lineItems.filter(i => i.description).map(i => ({
+            description: i.description,
+            quantity: i.quantity,
+            rate: i.rate,
+            amount: i.quantity * i.rate,
+          })),
+          notes,
         }),
       })
+      const result = await res.json()
+      if (result.note) {
+        // No email configured — invoice still saved
+        toast.success('Invoice saved! (Configure RESEND_API_KEY to send emails)')
+      } else if (result.success) {
+        toast.success('Invoice sent successfully!')
+      } else {
+        toast.success('Invoice saved! (Email may not have been delivered)')
+      }
     } catch {
-      // Email may fail but invoice is saved
+      toast.success('Invoice saved! (Email could not be sent)')
     }
 
-    toast.success('Invoice sent successfully!')
     setSendDialog(false)
     router.push('/dashboard/invoices')
   }
@@ -418,22 +483,97 @@ ${sender.name || sender.company}`)
   const handleDownloadPDF = async () => {
     setDownloadingPdf(true)
     try {
-      const element = document.getElementById('invoice-preview')
-      if (!element) return
-
       const { default: html2canvas } = await import('html2canvas')
       const { default: jsPDF } = await import('jspdf')
 
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const w = pdf.internal.pageSize.getWidth()
-      const h = (canvas.height * w) / canvas.width
-      pdf.addImage(imgData, 'PNG', 0, 0, w, h)
+      // A4 at 96dpi = 794px wide. We render at 2x for crispness.
+      const A4_WIDTH_PX = 794
+      const SCALE = 2
+
+      // Create an off-screen container so clipping / scroll never affects capture
+      const container = document.createElement('div')
+      container.style.cssText = [
+        'position:fixed',
+        'top:-9999px',
+        'left:-9999px',
+        `width:${A4_WIDTH_PX}px`,
+        'background:white',
+        'z-index:-1',
+        'pointer-events:none',
+      ].join(';')
+      document.body.appendChild(container)
+
+      // Clone the live preview node into the off-screen container
+      const source = document.getElementById('invoice-preview')
+      if (!source) {
+        document.body.removeChild(container)
+        toast.error('Invoice preview not found')
+        return
+      }
+      const clone = source.cloneNode(true) as HTMLElement
+      clone.style.cssText = [
+        'width:100%',
+        'background:white',
+        'border-radius:0',
+        'box-shadow:none',
+        'overflow:visible',
+        'margin:0',
+        'padding:0',
+      ].join(';')
+      container.appendChild(clone)
+
+      // Allow layout to settle
+      await new Promise(r => setTimeout(r, 120))
+
+      const canvas = await html2canvas(container, {
+        scale: SCALE,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: A4_WIDTH_PX,
+        width: A4_WIDTH_PX,
+      })
+
+      document.body.removeChild(container)
+
+      const imgData = canvas.toDataURL('image/png', 1.0)
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pageW = pdf.internal.pageSize.getWidth()   // 210mm
+      const pageH = pdf.internal.pageSize.getHeight()  // 297mm
+      const imgH = (canvas.height / SCALE / A4_WIDTH_PX) * pageW * (A4_WIDTH_PX / (A4_WIDTH_PX / 25.4 * 96 / 25.4))
+
+      // Simpler: fit width, let height flow — add pages if needed
+      const ratio = pageW / (canvas.width / SCALE)
+      const renderedH = (canvas.height / SCALE) * ratio
+      const MARGIN = 0
+
+      if (renderedH <= pageH) {
+        pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, pageW - MARGIN * 2, renderedH - MARGIN * 2)
+      } else {
+        // Multi-page: slice canvas into A4-height chunks
+        const pageHeightPx = Math.floor(pageH / ratio)
+        let yOffset = 0
+        let page = 0
+        while (yOffset < canvas.height / SCALE) {
+          if (page > 0) pdf.addPage()
+          const sliceH = Math.min(pageHeightPx, canvas.height / SCALE - yOffset)
+          const sliceCanvas = document.createElement('canvas')
+          sliceCanvas.width = canvas.width
+          sliceCanvas.height = sliceH * SCALE
+          const ctx = sliceCanvas.getContext('2d')!
+          ctx.drawImage(canvas, 0, yOffset * SCALE, canvas.width, sliceH * SCALE, 0, 0, canvas.width, sliceH * SCALE)
+          const sliceData = sliceCanvas.toDataURL('image/png', 1.0)
+          pdf.addImage(sliceData, 'PNG', 0, 0, pageW, sliceH * ratio)
+          yOffset += pageHeightPx
+          page++
+        }
+      }
+
       pdf.save(`${invoiceNumber || 'invoice'}.pdf`)
-      toast.success('PDF downloaded')
+      toast.success('PDF downloaded!')
     } catch (err) {
-      toast.error('Failed to generate PDF')
+      console.error('PDF error:', err)
+      toast.error('Failed to generate PDF — please try again')
     } finally {
       setDownloadingPdf(false)
     }
@@ -826,5 +966,20 @@ ${sender.name || sender.company}`)
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function NewInvoice() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-[#FF0A54] border-t-transparent animate-spin" />
+          <p className="text-white/40 text-sm">Loading invoice editor...</p>
+        </div>
+      </div>
+    }>
+      <NewInvoiceInner />
+    </Suspense>
   )
 }
