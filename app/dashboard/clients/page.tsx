@@ -31,6 +31,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -99,10 +100,12 @@ function ClientForm({ form, onChange }: ClientFormProps) {
     <div className="space-y-4 pt-2">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2 sm:col-span-1">
-          <Label className="text-white/50 text-xs uppercase tracking-wider">
+          <Label htmlFor="client-name" className="text-white/50 text-xs uppercase tracking-wider">
             Full Name *
           </Label>
           <Input
+            id="client-name"
+            name="name"
             value={form.name}
             onChange={(e) => onChange({ name: e.target.value })}
             placeholder="Jane Smith"
@@ -110,10 +113,12 @@ function ClientForm({ form, onChange }: ClientFormProps) {
           />
         </div>
         <div className="col-span-2 sm:col-span-1">
-          <Label className="text-white/50 text-xs uppercase tracking-wider">
+          <Label htmlFor="client-company" className="text-white/50 text-xs uppercase tracking-wider">
             Company
           </Label>
           <Input
+            id="client-company"
+            name="company"
             value={form.company}
             onChange={(e) => onChange({ company: e.target.value })}
             placeholder="Acme Corp"
@@ -121,10 +126,12 @@ function ClientForm({ form, onChange }: ClientFormProps) {
           />
         </div>
         <div className="col-span-2 sm:col-span-1">
-          <Label className="text-white/50 text-xs uppercase tracking-wider">
+          <Label htmlFor="client-email" className="text-white/50 text-xs uppercase tracking-wider">
             Email *
           </Label>
           <Input
+            id="client-email"
+            name="email"
             type="email"
             value={form.email}
             onChange={(e) => onChange({ email: e.target.value })}
@@ -133,10 +140,12 @@ function ClientForm({ form, onChange }: ClientFormProps) {
           />
         </div>
         <div className="col-span-2 sm:col-span-1">
-          <Label className="text-white/50 text-xs uppercase tracking-wider">
+          <Label htmlFor="client-phone" className="text-white/50 text-xs uppercase tracking-wider">
             Phone
           </Label>
           <Input
+            id="client-phone"
+            name="phone"
             value={form.phone}
             onChange={(e) => onChange({ phone: e.target.value })}
             placeholder="+1 555 000 0000"
@@ -144,10 +153,12 @@ function ClientForm({ form, onChange }: ClientFormProps) {
           />
         </div>
         <div className="col-span-2">
-          <Label className="text-white/50 text-xs uppercase tracking-wider">
+          <Label htmlFor="client-address" className="text-white/50 text-xs uppercase tracking-wider">
             Address
           </Label>
           <Input
+            id="client-address"
+            name="address"
             value={form.address}
             onChange={(e) => onChange({ address: e.target.value })}
             placeholder="88 Soho Loft, New York, NY 10012"
@@ -641,6 +652,9 @@ export default function ClientsPage() {
             <DialogTitle className="font-serif text-xl text-white flex items-center gap-2">
               <RiAddLine className="w-5 h-5 text-[#FF0A54]" /> Add New Client
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Fill in the details to add a new client to your account.
+            </DialogDescription>
           </DialogHeader>
           <ClientForm form={form} onChange={patchForm} />
           <DialogFooter>
@@ -677,6 +691,9 @@ export default function ClientsPage() {
             <DialogTitle className="font-serif text-xl text-white flex items-center gap-2">
               <RiPencilLine className="w-5 h-5 text-[#FF0A54]" /> Edit Client
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Update the details for this client.
+            </DialogDescription>
           </DialogHeader>
           <ClientForm form={form} onChange={patchForm} />
           <DialogFooter>

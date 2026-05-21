@@ -117,8 +117,10 @@ export default function AIPage() {
         <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-5 space-y-4">
           <h3 className="text-white font-semibold text-sm">Your Input</h3>
           <div>
-            <Label className="text-white/40 text-xs">Describe what you need</Label>
+            <Label htmlFor="ai-input" className="text-white/40 text-xs">Describe what you need</Label>
             <Textarea
+              id="ai-input"
+              name="ai_input"
               placeholder={feature.placeholder}
               value={input}
               onChange={e => setInput(e.target.value)}

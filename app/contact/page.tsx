@@ -43,17 +43,17 @@ export default function ContactPage() {
         <form onSubmit={handleSubmit} className="bg-[#0a0a0a] border border-white/8 rounded-xl p-8 space-y-5">
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
-              <Label className="text-white/50 text-sm">Name</Label>
-              <Input placeholder="Your name" className="mt-1.5 bg-[#111] border-white/10 text-white placeholder:text-white/20 focus-visible:ring-0 focus:border-[#FF0A54]/50" />
+              <Label htmlFor="contact-name" className="text-white/50 text-sm">Name</Label>
+              <Input id="contact-name" name="name" placeholder="Your name" className="mt-1.5 bg-[#111] border-white/10 text-white placeholder:text-white/20 focus-visible:ring-0 focus:border-[#FF0A54]/50" />
             </div>
             <div>
-              <Label className="text-white/50 text-sm">Email</Label>
-              <Input type="email" placeholder="you@example.com" className="mt-1.5 bg-[#111] border-white/10 text-white placeholder:text-white/20 focus-visible:ring-0 focus:border-[#FF0A54]/50" />
+              <Label htmlFor="contact-email" className="text-white/50 text-sm">Email</Label>
+              <Input id="contact-email" name="email" type="email" placeholder="you@example.com" className="mt-1.5 bg-[#111] border-white/10 text-white placeholder:text-white/20 focus-visible:ring-0 focus:border-[#FF0A54]/50" />
             </div>
           </div>
           <div>
-            <Label className="text-white/50 text-sm">Message</Label>
-            <Textarea placeholder="How can we help?" rows={5} className="mt-1.5 bg-[#111] border-white/10 text-white placeholder:text-white/20 focus-visible:ring-0 focus:border-[#FF0A54]/50 resize-none" />
+            <Label htmlFor="contact-message" className="text-white/50 text-sm">Message</Label>
+            <Textarea id="contact-message" name="message" placeholder="How can we help?" rows={5} className="mt-1.5 bg-[#111] border-white/10 text-white placeholder:text-white/20 focus-visible:ring-0 focus:border-[#FF0A54]/50 resize-none" />
           </div>
           <Button type="submit" className="w-full bg-[#FF0A54] hover:bg-[#FF0A54]/90 text-white font-medium cherry-glow-sm">
             Send Message

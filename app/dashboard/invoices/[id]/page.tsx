@@ -31,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -127,30 +128,169 @@ export default function InvoiceDetailPage() {
       const A4_WIDTH_PX = 794
       const SCALE = 2
 
-      const source = document.getElementById('invoice-pdf')
-      if (!source) { toast.error('Invoice preview not found'); return }
+      const fmtD = (s: string) => s ? new Date(s + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
+      const isDirectImage = (url: string) => {
+        try {
+          const u = new URL(url)
+          return /\.(png|jpe?g|gif|webp|svg|ico)(\?|$)/i.test(u.pathname) ||
+            ['supabase.co', 'githubusercontent.com', 'cloudinary.com', 'imgix.net', 'unsplash.com'].some(h => u.hostname.includes(h))
+        } catch { return false }
+      }
 
-      // Off-screen container — avoids all scroll/clip issues
-      const container = document.createElement('div')
-      container.style.cssText = [
-        'position:fixed', 'top:-9999px', 'left:-9999px',
-        `width:${A4_WIDTH_PX}px`, 'background:white',
-        'z-index:-1', 'pointer-events:none',
-      ].join(';')
-      document.body.appendChild(container)
+      // Pre-fetch logo as base64 so html2canvas never hits CORS
+      let logoDataUrl: string | null = null
+      if (target.sender_logo_url && isDirectImage(target.sender_logo_url)) {
+        try {
+          const res = await fetch(target.sender_logo_url)
+          const blob = await res.blob()
+          logoDataUrl = await new Promise<string>(r => {
+            const fr = new FileReader()
+            fr.onload = () => r(fr.result as string)
+            fr.readAsDataURL(blob)
+          })
+        } catch { logoDataUrl = null }
+      }
+      const fmtA = (n: number) => {
+        try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: target.currency || 'USD' }).format(n) }
+        catch { return `${target.currency || 'USD'} ${n.toFixed(2)}` }
+      }
 
-      const clone = source.cloneNode(true) as HTMLElement
-      clone.style.cssText = 'width:100%;background:white;border-radius:0;box-shadow:none;overflow:visible;margin:0;padding:0;'
-      container.appendChild(clone)
+      const statusColors: Record<string, string> = {
+        paid: 'border:1px solid #6ee7b7;color:#10b981;',
+        unpaid: 'border:1px solid #fca5a5;color:#ef4444;',
+        draft: 'border:1px solid #d1d5db;color:#6b7280;',
+      }
+      const statusColor = statusColors[target.status] || statusColors.unpaid
 
-      await new Promise(r => setTimeout(r, 120))
+      const items = target.invoice_items || []
+      const client = target.clients
 
-      const canvas = await html2canvas(container, {
+      const itemRows = items.map(i => `
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td style="padding:8px 0;color:#374151;font-size:13px;">${i.description}</td>
+          <td style="padding:8px 0;text-align:right;color:#6b7280;font-size:13px;">${i.quantity}</td>
+          <td style="padding:8px 0;text-align:right;color:#6b7280;font-size:13px;">${fmtA(i.rate)}</td>
+          <td style="padding:8px 0;text-align:right;font-weight:600;color:#1f2937;font-size:13px;">${fmtA(i.amount)}</td>
+        </tr>`).join('')
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+        <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;background:#fff;color:#111;}</style>
+      </head><body>
+        <div style="width:${A4_WIDTH_PX}px;background:#fff;padding:0;">
+          <div style="padding:48px 48px 32px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                ${logoDataUrl
+                  ? `<img src="${logoDataUrl}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin-bottom:12px;"/>`
+                  : `<div style="width:56px;height:56px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:#d1d5db;font-size:11px;">Logo</div>`}
+                <p style="font-weight:700;color:#111827;font-size:15px;">${target.sender_company || target.sender_name || ''}</p>
+                <p style="color:#6b7280;font-size:12px;">${target.sender_email || ''}</p>
+                <p style="color:#6b7280;font-size:12px;">${target.sender_address || ''}</p>
+              </div>
+              <div style="text-align:right;">
+                <h1 style="font-size:32px;font-weight:900;color:#111827;letter-spacing:3px;margin-bottom:8px;">INVOICE</h1>
+                <p style="color:#ff0a54;font-weight:700;font-size:16px;">${target.invoice_number}</p>
+                <div style="margin-top:8px;display:inline-block;border-radius:4px;padding:2px 10px;${statusColor}">
+                  <span style="font-size:11px;font-weight:700;text-transform:uppercase;">${target.status}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:32px;margin-top:24px;font-size:12px;color:#6b7280;">
+              <div style="display:flex;gap:12px;">
+                <span style="font-weight:500;color:#374151;width:80px;">Issue Date</span>
+                <span>${fmtD(target.issue_date)}</span>
+              </div>
+              ${target.due_date ? `<div style="display:flex;gap:12px;">
+                <span style="font-weight:500;color:#374151;width:80px;">Due Date</span>
+                <span>${fmtD(target.due_date)}</span>
+              </div>` : ''}
+            </div>
+          </div>
+
+          <div style="padding:24px 48px;border-top:1px solid #f3f4f6;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;">
+              <div>
+                <p style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;">Bill From</p>
+                <p style="font-weight:600;color:#1f2937;font-size:13px;">${target.sender_company || target.sender_name || ''}</p>
+                <p style="color:#6b7280;font-size:12px;margin-top:2px;">${target.sender_email || ''}</p>
+                ${target.sender_address ? `<p style="color:#6b7280;font-size:12px;">${target.sender_address}</p>` : ''}
+              </div>
+              ${client ? `<div>
+                <p style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;">Bill To</p>
+                <p style="font-weight:600;color:#1f2937;font-size:13px;">${client.name}</p>
+                ${client.company ? `<p style="color:#6b7280;font-size:12px;">${client.company}</p>` : ''}
+                <p style="color:#6b7280;font-size:12px;margin-top:2px;">${client.email}</p>
+                ${client.phone ? `<p style="color:#6b7280;font-size:12px;">${client.phone}</p>` : ''}
+                ${client.address ? `<p style="color:#6b7280;font-size:12px;">${client.address}</p>` : ''}
+              </div>` : ''}
+            </div>
+          </div>
+
+          <div style="padding:0 48px 32px;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="border-bottom:2px solid #e5e7eb;">
+                  <th style="text-align:left;padding:12px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Description</th>
+                  <th style="text-align:right;padding:12px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;width:64px;">Qty</th>
+                  <th style="text-align:right;padding:12px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;width:112px;">Rate</th>
+                  <th style="text-align:right;padding:12px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;width:112px;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>${itemRows}</tbody>
+            </table>
+
+            <div style="display:flex;justify-content:flex-end;margin-top:24px;">
+              <div style="width:240px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:8px;">
+                  <span>Subtotal</span><span>${fmtA(target.subtotal)}</span>
+                </div>
+                ${target.tax_rate > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:8px;">
+                  <span>Tax (${target.tax_rate}%)</span><span>${fmtA(target.tax_amount)}</span>
+                </div>` : ''}
+                ${target.discount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:8px;">
+                  <span>Discount</span><span>-${fmtA(target.discount)}</span>
+                </div>` : ''}
+                <div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid #e5e7eb;">
+                  <span style="font-weight:700;color:#1f2937;font-size:14px;">Total Due</span>
+                  <span style="font-weight:900;color:#ff0a54;font-size:16px;">${fmtA(target.total)}</span>
+                </div>
+              </div>
+            </div>
+
+            ${target.notes ? `<div style="margin-top:32px;padding-top:24px;border-top:1px solid #f3f4f6;">
+              <p style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Notes</p>
+              <p style="color:#6b7280;font-size:12px;line-height:1.6;">${target.notes}</p>
+            </div>` : ''}
+
+            <div style="margin-top:32px;text-align:center;font-size:11px;color:#d1d5db;letter-spacing:3px;text-transform:uppercase;">
+              Thank you for your business.
+            </div>
+          </div>
+        </div>
+      </body></html>`
+
+      // Use a hidden iframe so app's Tailwind CSS (which uses lab() etc.) never leaks into html2canvas
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:794px;height:1px;border:none;visibility:hidden;'
+      document.body.appendChild(iframe)
+
+      await new Promise<void>(resolve => {
+        iframe.onload = () => resolve()
+        iframe.srcdoc = html
+      })
+
+      const iframeDoc = iframe.contentDocument!
+      const root = iframeDoc.body.firstElementChild as HTMLElement
+      root.style.width = `${A4_WIDTH_PX}px`
+
+      await new Promise(r => setTimeout(r, 200))
+
+      const canvas = await html2canvas(root, {
         scale: SCALE, useCORS: true, backgroundColor: '#ffffff',
         logging: false, windowWidth: A4_WIDTH_PX, width: A4_WIDTH_PX,
       })
 
-      document.body.removeChild(container)
+      document.body.removeChild(iframe)
 
       const imgData = canvas.toDataURL('image/png', 1.0)
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -297,7 +437,7 @@ export default function InvoiceDetailPage() {
     if (!invoice) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { count } = await supabase.from('invoices').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
+    const { count } = await supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
     const num = String((count || 0) + 1).padStart(3, '0')
     const { data: newInv, error } = await supabase.from('invoices').insert({
       user_id: user.id,
@@ -545,6 +685,9 @@ export default function InvoiceDetailPage() {
             <DialogTitle className="flex items-center gap-2 font-serif text-xl text-white">
               <RiMailLine className="w-5 h-5 text-[#FF0A54]" /> Send Invoice
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Compose and send the invoice email to your client.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             {invoice.clients && (
@@ -564,12 +707,12 @@ export default function InvoiceDetailPage() {
               {generatingEmail ? <><RiLoaderLine className="w-4 h-4 animate-spin" />Generating...</> : <><RiSparkling2Line className="w-4 h-4" />Generate Email with AI</>}
             </Button>
             <div>
-              <Label className="text-white/50 text-xs">Subject</Label>
-              <Input value={emailSubject} onChange={e => setEmailSubject(e.target.value)} className="mt-1.5 bg-[#111] border-white/10 text-white focus-visible:ring-0" />
+              <Label htmlFor="send-email-subject" className="text-white/50 text-xs">Subject</Label>
+              <Input id="send-email-subject" name="email_subject" value={emailSubject} onChange={e => setEmailSubject(e.target.value)} className="mt-1.5 bg-[#111] border-white/10 text-white focus-visible:ring-0" />
             </div>
             <div>
-              <Label className="text-white/50 text-xs">Message</Label>
-              <Textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} className="mt-1.5 min-h-36 bg-[#111] border-white/10 text-white focus-visible:ring-0 resize-none" />
+              <Label htmlFor="send-email-body" className="text-white/50 text-xs">Message</Label>
+              <Textarea id="send-email-body" name="email_body" value={emailBody} onChange={e => setEmailBody(e.target.value)} className="mt-1.5 min-h-36 bg-[#111] border-white/10 text-white focus-visible:ring-0 resize-none" />
             </div>
           </div>
           <DialogFooter>

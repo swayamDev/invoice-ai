@@ -242,12 +242,12 @@ export default function SettingsPage() {
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Full Name</Label>
-              <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full name" className={`mt-1.5 ${fieldClass}`} />
+              <Label htmlFor="profile-full-name" className="text-white/50 text-xs uppercase tracking-wider">Full Name</Label>
+              <Input id="profile-full-name" name="full_name" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full name" className={`mt-1.5 ${fieldClass}`} />
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Email Address</Label>
-              <Input value={userEmail} disabled className={`mt-1.5 ${fieldClass} opacity-50 cursor-not-allowed`} />
+              <Label htmlFor="profile-email" className="text-white/50 text-xs uppercase tracking-wider">Email Address</Label>
+              <Input id="profile-email" name="email" value={userEmail} disabled className={`mt-1.5 ${fieldClass} opacity-50 cursor-not-allowed`} />
               <p className="text-white/25 text-xs mt-1">Email cannot be changed here</p>
             </div>
           </div>
@@ -273,34 +273,34 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <Label className="text-white/50 text-xs uppercase tracking-wider">Logo URL</Label>
+            <Label htmlFor="company-logo-url" className="text-white/50 text-xs uppercase tracking-wider">Logo URL</Label>
             <div className="flex gap-3 mt-1.5">
               <div className="w-12 h-12 rounded-full bg-[#111] border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {logoUrl
                   ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" />
                   : <RiImageLine className="w-5 h-5 text-white/20" />}
               </div>
-              <Input value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://your-logo-url.com/logo.png" className={fieldClass} />
+              <Input id="company-logo-url" name="logo_url" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://your-logo-url.com/logo.png" className={fieldClass} />
             </div>
             <p className="text-white/25 text-xs mt-1">Enter a public image URL for your logo</p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Business Name</Label>
-              <Input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Acme Corp" className={`mt-1.5 ${fieldClass}`} />
+              <Label htmlFor="company-name" className="text-white/50 text-xs uppercase tracking-wider">Business Name</Label>
+              <Input id="company-name" name="business_name" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Acme Corp" className={`mt-1.5 ${fieldClass}`} />
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Business Email</Label>
-              <Input type="email" value={businessEmail} onChange={e => setBusinessEmail(e.target.value)} placeholder="billing@acme.com" className={`mt-1.5 ${fieldClass}`} />
+              <Label htmlFor="company-email" className="text-white/50 text-xs uppercase tracking-wider">Business Email</Label>
+              <Input id="company-email" name="business_email" type="email" value={businessEmail} onChange={e => setBusinessEmail(e.target.value)} placeholder="billing@acme.com" className={`mt-1.5 ${fieldClass}`} />
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Phone</Label>
-              <Input value={businessPhone} onChange={e => setBusinessPhone(e.target.value)} placeholder="+1 555 000 0000" className={`mt-1.5 ${fieldClass}`} />
+              <Label htmlFor="company-phone" className="text-white/50 text-xs uppercase tracking-wider">Phone</Label>
+              <Input id="company-phone" name="business_phone" value={businessPhone} onChange={e => setBusinessPhone(e.target.value)} placeholder="+1 555 000 0000" className={`mt-1.5 ${fieldClass}`} />
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Address</Label>
-              <Input value={businessAddress} onChange={e => setBusinessAddress(e.target.value)} placeholder="123 Main St, New York" className={`mt-1.5 ${fieldClass}`} />
+              <Label htmlFor="company-address" className="text-white/50 text-xs uppercase tracking-wider">Address</Label>
+              <Input id="company-address" name="business_address" value={businessAddress} onChange={e => setBusinessAddress(e.target.value)} placeholder="123 Main St, New York" className={`mt-1.5 ${fieldClass}`} />
             </div>
           </div>
 
@@ -323,9 +323,9 @@ export default function SettingsPage() {
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Default Currency</Label>
+              <Label htmlFor="invoice-currency" className="text-white/50 text-xs uppercase tracking-wider">Default Currency</Label>
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger className={`mt-1.5 ${fieldClass}`}>
+                <SelectTrigger id="invoice-currency" className={`mt-1.5 ${fieldClass}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#111] border-white/10">
@@ -336,13 +336,13 @@ export default function SettingsPage() {
               </Select>
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Default Tax Rate (%)</Label>
-              <Input type="number" min="0" max="100" value={taxRate} onChange={e => setTaxRate(e.target.value)} placeholder="0" className={`mt-1.5 ${fieldClass}`} />
+              <Label htmlFor="invoice-tax-rate" className="text-white/50 text-xs uppercase tracking-wider">Default Tax Rate (%)</Label>
+              <Input id="invoice-tax-rate" name="tax_rate" type="number" min="0" max="100" value={taxRate} onChange={e => setTaxRate(e.target.value)} placeholder="0" className={`mt-1.5 ${fieldClass}`} />
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Payment Terms (days)</Label>
+              <Label htmlFor="invoice-payment-terms" className="text-white/50 text-xs uppercase tracking-wider">Payment Terms (days)</Label>
               <Select value={paymentTerms} onValueChange={setPaymentTerms}>
-                <SelectTrigger className={`mt-1.5 ${fieldClass}`}>
+                <SelectTrigger id="invoice-payment-terms" className={`mt-1.5 ${fieldClass}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#111] border-white/10">
@@ -353,14 +353,16 @@ export default function SettingsPage() {
               </Select>
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Invoice Prefix</Label>
-              <Input value={invoicePrefix} onChange={e => setInvoicePrefix(e.target.value)} placeholder="INV-" className={`mt-1.5 ${fieldClass}`} />
+              <Label htmlFor="invoice-prefix" className="text-white/50 text-xs uppercase tracking-wider">Invoice Prefix</Label>
+              <Input id="invoice-prefix" name="invoice_prefix" value={invoicePrefix} onChange={e => setInvoicePrefix(e.target.value)} placeholder="INV-" className={`mt-1.5 ${fieldClass}`} />
             </div>
           </div>
 
           <div>
-            <Label className="text-white/50 text-xs uppercase tracking-wider">Default Notes / Terms</Label>
+            <Label htmlFor="invoice-notes" className="text-white/50 text-xs uppercase tracking-wider">Default Notes / Terms</Label>
             <textarea
+              id="invoice-notes"
+              name="invoice_notes"
               value={invoiceNotes}
               onChange={e => setInvoiceNotes(e.target.value)}
               placeholder="Payment due within specified terms. Late payments subject to 1.5% monthly interest."
@@ -424,8 +426,10 @@ export default function SettingsPage() {
               <p className="text-white/40 text-sm">Use a strong password with at least 8 characters.</p>
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">New Password</Label>
+              <Label htmlFor="security-new-password" className="text-white/50 text-xs uppercase tracking-wider">New Password</Label>
               <Input
+                id="security-new-password"
+                name="new_password"
                 type="password"
                 value={newPw}
                 onChange={e => setNewPw(e.target.value)}
@@ -434,8 +438,10 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <Label className="text-white/50 text-xs uppercase tracking-wider">Confirm Password</Label>
+              <Label htmlFor="security-confirm-password" className="text-white/50 text-xs uppercase tracking-wider">Confirm Password</Label>
               <Input
+                id="security-confirm-password"
+                name="confirm_password"
                 type="password"
                 value={confirmPw}
                 onChange={e => setConfirmPw(e.target.value)}

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -62,6 +63,9 @@ export function CreateWithAIDialog({ open, onOpenChange }: Props) {
             </div>
             Create Invoice with AI
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Describe your work in plain language and AI will auto-fill your invoice fields.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-1">

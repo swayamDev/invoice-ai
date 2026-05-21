@@ -32,6 +32,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -248,7 +249,7 @@ function NewInvoiceInner() {
       // Generate invoice number
       const { count } = await supabase
         .from('invoices')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
       const num = String((count || 0) + 1).padStart(3, '0')
       setInvoiceNumber(`INV-${new Date().getFullYear()}-${num}`)
@@ -486,46 +487,155 @@ ${sender.name || sender.company}`)
       const { default: html2canvas } = await import('html2canvas')
       const { default: jsPDF } = await import('jspdf')
 
-      // A4 at 96dpi = 794px wide. We render at 2x for crispness.
       const A4_WIDTH_PX = 794
       const SCALE = 2
 
-      // Create an off-screen container so clipping / scroll never affects capture
-      const container = document.createElement('div')
-      container.style.cssText = [
-        'position:fixed',
-        'top:-9999px',
-        'left:-9999px',
-        `width:${A4_WIDTH_PX}px`,
-        'background:white',
-        'z-index:-1',
-        'pointer-events:none',
-      ].join(';')
-      document.body.appendChild(container)
+      const formatD = (s: string) => s ? new Date(s + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
 
-      // Clone the live preview node into the off-screen container
-      const source = document.getElementById('invoice-preview')
-      if (!source) {
-        document.body.removeChild(container)
-        toast.error('Invoice preview not found')
-        return
+      const isDirectImage = (url: string) => {
+        try {
+          const u = new URL(url)
+          return /\.(png|jpe?g|gif|webp|svg|ico)(\?|$)/i.test(u.pathname) ||
+            ['supabase.co', 'githubusercontent.com', 'cloudinary.com', 'imgix.net', 'unsplash.com'].some(h => u.hostname.includes(h))
+        } catch { return false }
       }
-      const clone = source.cloneNode(true) as HTMLElement
-      clone.style.cssText = [
-        'width:100%',
-        'background:white',
-        'border-radius:0',
-        'box-shadow:none',
-        'overflow:visible',
-        'margin:0',
-        'padding:0',
-      ].join(';')
-      container.appendChild(clone)
 
-      // Allow layout to settle
-      await new Promise(r => setTimeout(r, 120))
+      // Pre-fetch logo as base64 so html2canvas never hits CORS
+      let logoDataUrl: string | null = null
+      if (logoUrl && isDirectImage(logoUrl)) {
+        try {
+          const res = await fetch(logoUrl)
+          const blob = await res.blob()
+          logoDataUrl = await new Promise<string>(r => {
+            const fr = new FileReader()
+            fr.onload = () => r(fr.result as string)
+            fr.readAsDataURL(blob)
+          })
+        } catch { logoDataUrl = null }
+      }
+      const fmtAmt = (n: number) => {
+        try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(n) }
+        catch { return `${currency || 'USD'} ${n.toFixed(2)}` }
+      }
+      const sub = lineItems.reduce((s, i) => s + i.quantity * i.rate, 0)
+      const tax = sub * (taxRate / 100)
+      const tot = sub + tax
+      const client = lineItems ? selectedClient : null
 
-      const canvas = await html2canvas(container, {
+      const itemRows = lineItems.filter(i => i.description).map(i => `
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td style="padding:8px 0;color:#374151;font-size:13px;">${i.description}</td>
+          <td style="padding:8px 0;text-align:right;color:#6b7280;font-size:13px;">${i.quantity}</td>
+          <td style="padding:8px 0;text-align:right;color:#6b7280;font-size:13px;">${fmtAmt(i.rate)}</td>
+          <td style="padding:8px 0;text-align:right;font-weight:600;color:#1f2937;font-size:13px;">${fmtAmt(i.quantity * i.rate)}</td>
+        </tr>`).join('')
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+        <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;background:#fff;color:#111;}</style>
+      </head><body>
+        <div style="width:${A4_WIDTH_PX}px;background:#fff;padding:0;">
+          <!-- Header -->
+          <div style="padding:40px 40px 24px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                ${logoDataUrl ? `<img src="${logoDataUrl}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin-bottom:12px;"/>` :
+                  `<div style="width:56px;height:56px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:#9ca3af;font-size:11px;">Logo</div>`}
+                <p style="font-weight:700;color:#111827;font-size:15px;">${sender.company || sender.name || ''}</p>
+                <p style="color:#6b7280;font-size:12px;">${sender.email || ''}</p>
+                <p style="color:#6b7280;font-size:12px;">${sender.address || ''}</p>
+              </div>
+              <div style="text-align:right;">
+                <h1 style="font-size:28px;font-weight:900;color:#111827;letter-spacing:2px;margin-bottom:4px;">INVOICE</h1>
+                <p style="color:#ff0a54;font-weight:700;font-size:15px;">${invoiceNumber}</p>
+                <div style="margin-top:8px;display:inline-block;border:1px solid #fca5a5;border-radius:4px;padding:2px 8px;">
+                  <span style="color:#ef4444;font-size:11px;font-weight:700;text-transform:uppercase;">UNPAID</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:24px;margin-top:20px;font-size:12px;color:#6b7280;">
+              <div>
+                <span style="font-weight:500;color:#374151;margin-right:12px;">Issue Date</span>
+                <span>${formatD(issueDate)}</span>
+              </div>
+              ${dueDate ? `<div><span style="font-weight:500;color:#374151;margin-right:12px;">Due Date</span><span>${formatD(dueDate)}</span></div>` : ''}
+            </div>
+          </div>
+          <!-- Bill From/To -->
+          <div style="padding:16px 40px;border-top:1px solid #f3f4f6;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+              <div>
+                <p style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Bill From</p>
+                <p style="font-weight:600;color:#1f2937;font-size:13px;">${sender.company || sender.name || ''}</p>
+                <p style="color:#6b7280;font-size:12px;">${sender.email || ''}</p>
+                <p style="color:#6b7280;font-size:12px;">${sender.address || ''}</p>
+              </div>
+              ${client ? `<div>
+                <p style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Bill To</p>
+                <p style="font-weight:600;color:#1f2937;font-size:13px;">${client.name}</p>
+                ${client.company ? `<p style="color:#6b7280;font-size:12px;">${client.company}</p>` : ''}
+                <p style="color:#6b7280;font-size:12px;">${client.email}</p>
+                ${client.phone ? `<p style="color:#6b7280;font-size:12px;">${client.phone}</p>` : ''}
+                ${client.address ? `<p style="color:#6b7280;font-size:12px;">${client.address}</p>` : ''}
+              </div>` : ''}
+            </div>
+          </div>
+          <!-- Line Items -->
+          <div style="padding:16px 40px;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="border-bottom:2px solid #e5e7eb;">
+                  <th style="text-align:left;padding:8px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Description</th>
+                  <th style="text-align:right;padding:8px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;width:64px;">Qty</th>
+                  <th style="text-align:right;padding:8px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;width:96px;">Rate</th>
+                  <th style="text-align:right;padding:8px 0;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;width:96px;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>${itemRows}</tbody>
+            </table>
+            <!-- Totals -->
+            <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+              <div style="width:224px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:6px;">
+                  <span>Subtotal</span><span>${fmtAmt(sub)}</span>
+                </div>
+                ${taxRate > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:6px;">
+                  <span>Tax (${taxRate}%)</span><span>${fmtAmt(tax)}</span>
+                </div>` : ''}
+                <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid #e5e7eb;">
+                  <span style="font-weight:700;color:#1f2937;font-size:13px;">Total Due</span>
+                  <span style="font-weight:900;color:#ff0a54;font-size:15px;">${fmtAmt(tot)}</span>
+                </div>
+              </div>
+            </div>
+            ${notes ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;">
+              <p style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;">Notes</p>
+              <p style="color:#6b7280;font-size:12px;line-height:1.6;">${notes}</p>
+            </div>` : ''}
+            <div style="margin-top:24px;padding-bottom:16px;text-align:center;font-size:11px;color:#d1d5db;letter-spacing:3px;text-transform:uppercase;">
+              Thank you for your business.
+            </div>
+          </div>
+        </div>
+      </body></html>`
+
+      // Render inside a hidden iframe so app's Tailwind CSS (which uses lab() etc.) never leaks in
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:794px;height:1px;border:none;visibility:hidden;'
+      document.body.appendChild(iframe)
+
+      await new Promise<void>(resolve => {
+        iframe.onload = () => resolve()
+        iframe.srcdoc = html
+      })
+
+      const iframeDoc = iframe.contentDocument!
+      const root = iframeDoc.body.firstElementChild as HTMLElement
+      root.style.width = `${A4_WIDTH_PX}px`
+
+      // Give images a moment to load
+      await new Promise(r => setTimeout(r, 200))
+
+      const canvas = await html2canvas(root, {
         scale: SCALE,
         useCORS: true,
         backgroundColor: '#ffffff',
@@ -534,23 +644,18 @@ ${sender.name || sender.company}`)
         width: A4_WIDTH_PX,
       })
 
-      document.body.removeChild(container)
+      document.body.removeChild(iframe)
 
       const imgData = canvas.toDataURL('image/png', 1.0)
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const pageW = pdf.internal.pageSize.getWidth()   // 210mm
-      const pageH = pdf.internal.pageSize.getHeight()  // 297mm
-      const imgH = (canvas.height / SCALE / A4_WIDTH_PX) * pageW * (A4_WIDTH_PX / (A4_WIDTH_PX / 25.4 * 96 / 25.4))
-
-      // Simpler: fit width, let height flow — add pages if needed
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
       const ratio = pageW / (canvas.width / SCALE)
       const renderedH = (canvas.height / SCALE) * ratio
-      const MARGIN = 0
 
       if (renderedH <= pageH) {
-        pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, pageW - MARGIN * 2, renderedH - MARGIN * 2)
+        pdf.addImage(imgData, 'PNG', 0, 0, pageW, renderedH)
       } else {
-        // Multi-page: slice canvas into A4-height chunks
         const pageHeightPx = Math.floor(pageH / ratio)
         let yOffset = 0
         let page = 0
@@ -562,8 +667,7 @@ ${sender.name || sender.company}`)
           sliceCanvas.height = sliceH * SCALE
           const ctx = sliceCanvas.getContext('2d')!
           ctx.drawImage(canvas, 0, yOffset * SCALE, canvas.width, sliceH * SCALE, 0, 0, canvas.width, sliceH * SCALE)
-          const sliceData = sliceCanvas.toDataURL('image/png', 1.0)
-          pdf.addImage(sliceData, 'PNG', 0, 0, pageW, sliceH * ratio)
+          pdf.addImage(sliceCanvas.toDataURL('image/png', 1.0), 'PNG', 0, 0, pageW, sliceH * ratio)
           yOffset += pageHeightPx
           page++
         }
@@ -632,8 +736,10 @@ ${sender.name || sender.company}`)
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <Label className="text-white/50 text-xs uppercase tracking-wider">Invoice Number *</Label>
+                <Label htmlFor="invoice-number" className="text-white/50 text-xs uppercase tracking-wider">Invoice Number *</Label>
                 <Input
+                  id="invoice-number"
+                  name="invoice_number"
                   value={invoiceNumber}
                   onChange={e => setInvoiceNumber(e.target.value)}
                   placeholder="INV-2026-001"
@@ -641,9 +747,9 @@ ${sender.name || sender.company}`)
                 />
               </div>
               <div>
-                <Label className="text-white/50 text-xs uppercase tracking-wider">Currency</Label>
+                <Label htmlFor="invoice-currency" className="text-white/50 text-xs uppercase tracking-wider">Currency</Label>
                 <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger className="mt-1.5 bg-[#111] border-white/10 text-white focus:ring-0">
+                  <SelectTrigger id="invoice-currency" className="mt-1.5 bg-[#111] border-white/10 text-white focus:ring-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-[#111] border-white/10">
@@ -654,8 +760,10 @@ ${sender.name || sender.company}`)
                 </Select>
               </div>
               <div>
-                <Label className="text-white/50 text-xs uppercase tracking-wider">Issue Date *</Label>
+                <Label htmlFor="invoice-issue-date" className="text-white/50 text-xs uppercase tracking-wider">Issue Date *</Label>
                 <Input
+                  id="invoice-issue-date"
+                  name="issue_date"
                   type="date"
                   value={issueDate}
                   onChange={e => setIssueDate(e.target.value)}
@@ -663,8 +771,10 @@ ${sender.name || sender.company}`)
                 />
               </div>
               <div>
-                <Label className="text-white/50 text-xs uppercase tracking-wider">Due Date</Label>
+                <Label htmlFor="invoice-due-date" className="text-white/50 text-xs uppercase tracking-wider">Due Date</Label>
                 <Input
+                  id="invoice-due-date"
+                  name="due_date"
                   type="date"
                   value={dueDate}
                   onChange={e => setDueDate(e.target.value)}
@@ -682,20 +792,20 @@ ${sender.name || sender.company}`)
               <div className="space-y-3">
                 <p className="text-white/30 text-xs uppercase tracking-wider">From (Sender)</p>
                 <div>
-                  <Label className="text-white/50 text-xs">Name</Label>
-                  <Input value={sender.name} onChange={e => setSender(p => ({ ...p, name: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
+                  <Label htmlFor="sender-name" className="text-white/50 text-xs">Name</Label>
+                  <Input id="sender-name" name="sender_name" value={sender.name} onChange={e => setSender(p => ({ ...p, name: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
                 </div>
                 <div>
-                  <Label className="text-white/50 text-xs">Email</Label>
-                  <Input type="email" value={sender.email} onChange={e => setSender(p => ({ ...p, email: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
+                  <Label htmlFor="sender-email" className="text-white/50 text-xs">Email</Label>
+                  <Input id="sender-email" name="sender_email" type="email" value={sender.email} onChange={e => setSender(p => ({ ...p, email: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
                 </div>
                 <div>
-                  <Label className="text-white/50 text-xs">Company</Label>
-                  <Input value={sender.company} onChange={e => setSender(p => ({ ...p, company: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
+                  <Label htmlFor="sender-company" className="text-white/50 text-xs">Company</Label>
+                  <Input id="sender-company" name="sender_company" value={sender.company} onChange={e => setSender(p => ({ ...p, company: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
                 </div>
                 <div>
-                  <Label className="text-white/50 text-xs">Address</Label>
-                  <Input value={sender.address} onChange={e => setSender(p => ({ ...p, address: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
+                  <Label htmlFor="sender-address" className="text-white/50 text-xs">Address</Label>
+                  <Input id="sender-address" name="sender_address" value={sender.address} onChange={e => setSender(p => ({ ...p, address: e.target.value }))} className="mt-1 bg-[#111] border-white/10 text-white focus:border-[#FF0A54]/50 focus-visible:ring-0" />
                 </div>
               </div>
 
@@ -703,9 +813,9 @@ ${sender.name || sender.company}`)
               <div className="space-y-3">
                 <p className="text-white/30 text-xs uppercase tracking-wider">To (Recipient)</p>
                 <div>
-                  <Label className="text-white/50 text-xs">Client *</Label>
+                  <Label htmlFor="invoice-client" className="text-white/50 text-xs">Client *</Label>
                   <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                    <SelectTrigger className="mt-1 bg-[#111] border-white/10 text-white focus:ring-0">
+                    <SelectTrigger id="invoice-client" className="mt-1 bg-[#111] border-white/10 text-white focus:ring-0">
                       <SelectValue placeholder="Select a client..." />
                     </SelectTrigger>
                     <SelectContent className="bg-[#111] border-white/10">
@@ -804,8 +914,10 @@ ${sender.name || sender.company}`)
             {/* Tax */}
             <div className="mt-5 pt-4 border-t border-white/5 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Label className="text-white/50 text-xs">Tax Rate (%)</Label>
+                <Label htmlFor="invoice-tax-rate" className="text-white/50 text-xs">Tax Rate (%)</Label>
                 <Input
+                  id="invoice-tax-rate"
+                  name="tax_rate"
                   type="number"
                   min="0"
                   max="100"
@@ -827,6 +939,8 @@ ${sender.name || sender.company}`)
           <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-6">
             <h2 className="font-semibold text-white mb-4">Notes</h2>
             <Textarea
+              id="invoice-notes"
+              name="notes"
               placeholder="Payment terms, special notes, or instructions..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
@@ -901,6 +1015,9 @@ ${sender.name || sender.company}`)
               <RiMailLine className="w-5 h-5 text-[#FF0A54]" />
               Send Invoice
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Compose and send the invoice email to your client.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 pt-2">
@@ -930,8 +1047,10 @@ ${sender.name || sender.company}`)
             </Button>
 
             <div>
-              <Label className="text-white/50 text-xs">Subject</Label>
+              <Label htmlFor="send-email-subject" className="text-white/50 text-xs">Subject</Label>
               <Input
+                id="send-email-subject"
+                name="email_subject"
                 value={emailSubject}
                 onChange={e => setEmailSubject(e.target.value)}
                 placeholder="Email subject..."
@@ -939,8 +1058,10 @@ ${sender.name || sender.company}`)
               />
             </div>
             <div>
-              <Label className="text-white/50 text-xs">Message</Label>
+              <Label htmlFor="send-email-body" className="text-white/50 text-xs">Message</Label>
               <Textarea
+                id="send-email-body"
+                name="email_body"
                 value={emailBody}
                 onChange={e => setEmailBody(e.target.value)}
                 placeholder="Email body..."

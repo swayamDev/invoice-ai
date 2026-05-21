@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   RiSparkling2Line,
   RiDashboardLine,
@@ -35,6 +35,34 @@ export function Sidebar({ className }: SidebarProps) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userName, setUserName] = useState("");
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, business_name")
+          .eq("id", user.id)
+          .single();
+        if (profile) {
+          setUserName(profile.full_name || profile.business_name || user.email?.split("@")[0] || "");
+        } else {
+          setUserName(user.email?.split("@")[0] || "");
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadUser();
+  }, []);
+
+  const getInitials = (name: string) =>
+    name?.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
 
   const handleLogout = async () => {
     try {
@@ -132,17 +160,14 @@ export function Sidebar({ className }: SidebarProps) {
           <Avatar className="w-8 h-8 border border-[#FF0A54]/25 flex-shrink-0">
             <AvatarImage src="" />
             <AvatarFallback className="bg-[#FF0A54]/15 text-[#FF0A54] text-xs font-medium">
-              JD
+              {getInitials(userName)}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
-                John Doe
+                {userName || "Account"}
               </p>
-              <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 font-medium">
-                PRO
-              </span>
             </div>
           )}
         </div>
