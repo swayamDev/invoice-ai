@@ -42,7 +42,9 @@ export function Sidebar({ className }: SidebarProps) {
       try {
         const { createClient } = await import("@/lib/supabase/client");
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) return;
         const { data: profile } = await supabase
           .from("profiles")
@@ -50,7 +52,12 @@ export function Sidebar({ className }: SidebarProps) {
           .eq("id", user.id)
           .single();
         if (profile) {
-          setUserName(profile.full_name || profile.business_name || user.email?.split("@")[0] || "");
+          setUserName(
+            profile.full_name ||
+              profile.business_name ||
+              user.email?.split("@")[0] ||
+              "",
+          );
         } else {
           setUserName(user.email?.split("@")[0] || "");
         }
@@ -62,7 +69,12 @@ export function Sidebar({ className }: SidebarProps) {
   }, []);
 
   const getInitials = (name: string) =>
-    name?.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
+    name
+      ?.split(" ")
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "?";
 
   const handleLogout = async () => {
     try {
