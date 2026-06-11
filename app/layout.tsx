@@ -63,6 +63,7 @@ export const metadata: Metadata = {
       },
       {
         url: "/favicon.ico",
+        sizes: "any",
       },
     ],
 
@@ -70,16 +71,36 @@ export const metadata: Metadata = {
       {
         url: "/apple-touch-icon.png",
         sizes: "180x180",
+        type: "image/png",
       },
     ],
 
     shortcut: ["/favicon.ico"],
+
+    other: [
+      {
+        rel: "icon",
+        url: "/web-app-manifest-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        rel: "icon",
+        url: "/web-app-manifest-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+    ],
   },
 
   appleWebApp: {
     title: "Invoice AI",
     capable: true,
     statusBarStyle: "black-translucent",
+  },
+
+  formatDetection: {
+    telephone: false,
   },
 };
 
