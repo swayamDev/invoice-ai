@@ -9,6 +9,7 @@ import {
   RiCheckLine,
   RiArrowRightLine,
   RiSparkling2Line,
+  RiBillLine,
   RiMenu3Line,
   RiCloseLine,
 } from "react-icons/ri";
@@ -19,7 +20,7 @@ function Logo({ className = "" }: { className?: string }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div className="w-8 h-8 rounded-lg bg-[#FF0A54] cherry-glow-sm flex items-center justify-center">
-        <RiSparkling2Line className="w-5 h-5 text-white" />
+        <RiBillLine className="w-5 h-5 text-white" />
       </div>
       <span className="font-serif text-xl font-bold text-white tracking-tight">
         Invoice AI

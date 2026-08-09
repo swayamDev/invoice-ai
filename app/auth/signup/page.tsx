@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  RiSparkling2Line,
+  RiBillLine,
   RiEyeLine,
   RiEyeOffLine,
   RiCheckLine,
@@ -199,7 +199,7 @@ export default function SignUp() {
             className="inline-flex items-center gap-2 mb-6 hover:opacity-80 transition-opacity"
           >
             <div className="w-10 h-10 rounded-lg bg-[#FF0A54] cherry-glow flex items-center justify-center">
-              <RiSparkling2Line className="w-6 h-6 text-white" />
+              <RiBillLine className="w-6 h-6 text-white" />
             </div>
             <span className="font-serif text-xl font-bold text-white">
               Invoice AI

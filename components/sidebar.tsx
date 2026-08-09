@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  RiSparkling2Line,
+  RiBillLine,
   RiDashboardLine,
   RiFileTextLine,
   RiTeamLine,
@@ -107,7 +107,7 @@ export function Sidebar({ className }: SidebarProps) {
           className="flex items-center gap-2 hover:opacity-80 transition"
         >
           <div className="w-8 h-8 rounded-lg bg-[#FF0A54] cherry-glow-sm flex items-center justify-center flex-shrink-0">
-            <RiSparkling2Line className="w-5 h-5 text-white" />
+            <RiBillLine className="w-5 h-5 text-white" />
           </div>
           {!collapsed && (
             <span className="font-serif font-bold text-lg text-white tracking-tight">

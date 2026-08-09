@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
-import { RiSparkling2Line, RiArrowLeftLine, RiMailLine } from 'react-icons/ri'
+import { RiBillLine, RiArrowLeftLine, RiMailLine } from 'react-icons/ri'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 
@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2 mb-6 hover:opacity-80 transition-opacity">
             <div className="w-10 h-10 rounded-lg bg-[#FF0A54] cherry-glow flex items-center justify-center">
-              <RiSparkling2Line className="w-6 h-6 text-white" />
+              <RiBillLine className="w-6 h-6 text-white" />
             </div>
             <span className="font-serif text-xl font-bold text-white">Invoice AI</span>
           </Link>

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { RiSparkling2Line, RiArrowLeftLine } from 'react-icons/ri'
+import { RiBillLine, RiArrowLeftLine } from 'react-icons/ri'
 
 export const metadata = { title: 'About · Invoice AI' }
 
@@ -12,7 +12,7 @@ export default function AboutPage() {
         </Link>
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 rounded-lg bg-[#FF0A54] cherry-glow-sm flex items-center justify-center">
-            <RiSparkling2Line className="w-5 h-5 text-white" />
+            <RiBillLine className="w-5 h-5 text-white" />
           </div>
           <span className="font-serif text-2xl font-bold text-white">Invoice AI</span>
         </div>
