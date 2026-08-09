@@ -91,7 +91,10 @@ function InvoicePDFPreview({
         <div className="flex justify-between items-start">
           <div>
             {logoUrl ? (
-              <img src={logoUrl} alt="Logo" className="w-14 h-14 rounded-full object-cover mb-3" />
+              // Plain <img> is intentional: previews an arbitrary
+              // user-supplied logo URL (next/image needs known hosts).
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="Company logo" className="w-14 h-14 rounded-full object-cover mb-3" />
             ) : (
               <div className="w-14 h-14 rounded-full bg-gray-200 flex items-center justify-center mb-3 text-gray-400 text-xs">Logo</div>
             )}
@@ -254,7 +257,7 @@ function NewInvoiceInner() {
       const num = String((count || 0) + 1).padStart(3, '0')
       setInvoiceNumber(`INV-${new Date().getFullYear()}-${num}`)
 
-      // Handle AI param — auto-generate line items from description
+      // Handle AI param, auto-generate line items from description
       const aiText = searchParams.get('ai')
       if (aiText) {
         try {
@@ -282,11 +285,15 @@ function NewInvoiceInner() {
           }
         } catch (e) {
           console.error('AI parse error:', e)
-          // Silently fail — user can fill manually
+          // Silently fail, user can fill manually
         }
       }
     }
     load()
+    // Fetch-on-mount: run once. `searchParams`/`supabase` are intentionally
+    // excluded, `supabase` is a fresh client each render, and re-reading
+    // `?ai=` on every render would regenerate line items in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const addLineItem = () =>
@@ -381,7 +388,7 @@ function NewInvoiceInner() {
 
   const handleSendClick = () => {
     if (!validateInvoice()) return
-    setEmailSubject(`Invoice ${invoiceNumber} – ${fmt(total, currency)}`)
+    setEmailSubject(`Invoice ${invoiceNumber} - ${fmt(total, currency)}`)
     setEmailBody('')
     setSendDialog(true)
   }
@@ -466,7 +473,7 @@ ${sender.name || sender.company}`)
       })
       const result = await res.json()
       if (result.note) {
-        // No email configured — invoice still saved
+        // No email configured, invoice still saved
         toast.success('Invoice saved! (Configure RESEND_API_KEY to send emails)')
       } else if (result.success) {
         toast.success('Invoice sent successfully!')
@@ -500,9 +507,17 @@ ${sender.name || sender.company}`)
         } catch { return false }
       }
 
-      // Pre-fetch logo as base64 so html2canvas never hits CORS
+      // Logos are now uploaded from the user's device and stored as a
+      // data: URL (see lib/logo-upload.ts), so most of the time no fetch
+      // is needed at all, it's already inline-able. The fetch-and-convert
+      // path below only exists for accounts that saved an external logo
+      // URL before this change; html2canvas can't render those directly
+      // due to canvas CORS tainting, so we still need to fetch + re-encode
+      // them as a data URL first.
       let logoDataUrl: string | null = null
-      if (logoUrl && isDirectImage(logoUrl)) {
+      if (logoUrl?.startsWith('data:')) {
+        logoDataUrl = logoUrl
+      } else if (logoUrl && isDirectImage(logoUrl)) {
         try {
           const res = await fetch(logoUrl)
           const blob = await res.blob()
@@ -677,7 +692,7 @@ ${sender.name || sender.company}`)
       toast.success('PDF downloaded!')
     } catch (err) {
       console.error('PDF error:', err)
-      toast.error('Failed to generate PDF — please try again')
+      toast.error('Failed to generate PDF. Please try again')
     } finally {
       setDownloadingPdf(false)
     }
@@ -695,7 +710,7 @@ ${sender.name || sender.company}`)
           </Link>
           <div>
             <h1 className="font-serif text-2xl font-bold text-white">New Invoice</h1>
-            <p className="text-white/40 text-sm">Fill in the details — preview updates live</p>
+            <p className="text-white/40 text-sm">Fill in the details. Preview updates live</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -712,7 +727,7 @@ ${sender.name || sender.company}`)
       </div>
 
       <div className="grid xl:grid-cols-[1fr_480px] gap-6">
-        {/* ─── Left: Form ─── */}
+        {/* ==== Left: Form ==== */}
         <div className="space-y-5">
           {/* Invoice Details */}
           <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-6">
@@ -725,12 +740,14 @@ ${sender.name || sender.company}`)
             <div className="flex items-center gap-4 mb-5">
               <div className="w-14 h-14 rounded-full bg-[#111] border border-white/10 flex items-center justify-center overflow-hidden">
                 {logoUrl
-                  ? <img src={logoUrl} className="w-full h-full object-cover" alt="Logo" />
+                  // Same reasoning as above: arbitrary user-supplied URL.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={logoUrl} className="w-full h-full object-cover" alt="Company logo" />
                   : <RiImageLine className="w-6 h-6 text-white/20" />}
               </div>
               <div>
                 <p className="text-white/70 text-sm font-medium">Business Logo</p>
-                <p className="text-white/30 text-xs">Set in Settings → Company</p>
+                <p className="text-white/30 text-xs">Set in Settings &gt; Company</p>
               </div>
             </div>
 
@@ -820,7 +837,7 @@ ${sender.name || sender.company}`)
                     </SelectTrigger>
                     <SelectContent className="bg-[#111] border-white/10">
                       {clients.length === 0 ? (
-                        <SelectItem value="_none" disabled className="text-white/30">No clients yet — add one first</SelectItem>
+                        <SelectItem value="_none" disabled className="text-white/30">No clients yet, add one first</SelectItem>
                       ) : clients.map(c => (
                         <SelectItem key={c.id} value={c.id} className="text-white/70 focus:bg-[#FF0A54]/10 focus:text-white">{c.name}</SelectItem>
                       ))}
@@ -970,7 +987,7 @@ ${sender.name || sender.company}`)
           </div>
         </div>
 
-        {/* ─── Right: Live PDF Preview ─── */}
+        {/* ==== Right: Live PDF Preview ==== */}
         <div className="space-y-3">
           <div className="sticky top-6">
             <div className="flex items-center justify-between mb-3">

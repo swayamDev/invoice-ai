@@ -62,7 +62,7 @@ type FullInvoice = Invoice & { clients?: Client; invoice_items?: LineItem[] }
 
 const fmt = (v: number, cur = 'USD') =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(v)
-const fmtDate = (s: string) => s ? new Date(s + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
+const fmtDate = (s: string) => s ? new Date(s + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'border border-gray-300 text-gray-500',
@@ -86,37 +86,6 @@ export default function InvoiceDetailPage() {
   const [actioning, setActioning] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
 
-  useEffect(() => {
-    const load = async () => {
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*, clients(*), invoice_items(*)')
-        .eq('id', params.id as string)
-        .single()
-      if (!error && data) setInvoice(data as FullInvoice)
-      setLoading(false)
-
-      // Auto-download if ?download=true
-      if (searchParams.get('download') === 'true') {
-        setTimeout(() => handleDownload(data as FullInvoice), 500)
-      }
-    }
-    load()
-  }, [params.id])
-
-  const updateStatus = async (status: InvoiceStatus) => {
-    if (!invoice) return
-    setActioning(true)
-    const { error } = await supabase.from('invoices').update({
-      status,
-      ...(status === 'paid' ? { paid_at: new Date().toISOString() } : {}),
-    }).eq('id', invoice.id)
-    if (error) { toast.error('Failed to update'); setActioning(false); return }
-    setInvoice(prev => prev ? { ...prev, status } : prev)
-    toast.success(`Marked as ${status}`)
-    setActioning(false)
-  }
-
   const handleDownload = async (inv?: FullInvoice) => {
     const target = inv || invoice
     if (!target) return
@@ -137,9 +106,17 @@ export default function InvoiceDetailPage() {
         } catch { return false }
       }
 
-      // Pre-fetch logo as base64 so html2canvas never hits CORS
+      // Logos are now uploaded from the user's device and stored as a
+      // data: URL (see lib/logo-upload.ts), so most of the time no fetch
+      // is needed at all, it's already inline-able. The fetch-and-convert
+      // path below only exists for accounts that saved an external logo
+      // URL before this change; html2canvas can't render those directly
+      // due to canvas CORS tainting, so we still need to fetch + re-encode
+      // them as a data URL first.
       let logoDataUrl: string | null = null
-      if (target.sender_logo_url && isDirectImage(target.sender_logo_url)) {
+      if (target.sender_logo_url?.startsWith('data:')) {
+        logoDataUrl = target.sender_logo_url
+      } else if (target.sender_logo_url && isDirectImage(target.sender_logo_url)) {
         try {
           const res = await fetch(target.sender_logo_url)
           const blob = await res.blob()
@@ -328,21 +305,22 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  const generateAIEmail = async () => {
-    if (!invoice) return
+  const generateAIEmail = async (invoiceOverride?: FullInvoice) => {
+    const target = invoiceOverride ?? invoice
+    if (!target) return
     setGeneratingEmail(true)
-    const isReminder = invoice.status === 'unpaid'
+    const isReminder = target.status === 'unpaid'
     try {
       const res = await fetch('/api/ai/email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientName: invoice.clients?.name,
-          invoiceNumber: invoice.invoice_number,
-          amount: fmt(invoice.total, invoice.currency),
-          dueDate: fmtDate(invoice.due_date),
-          senderName: invoice.sender_name,
-          senderCompany: invoice.sender_company,
+          clientName: target.clients?.name,
+          invoiceNumber: target.invoice_number,
+          amount: fmt(target.total, target.currency),
+          dueDate: fmtDate(target.due_date),
+          senderName: target.sender_name,
+          senderCompany: target.sender_company,
           type: isReminder ? 'reminder' : 'invoice',
         }),
       })
@@ -351,15 +329,15 @@ export default function InvoiceDetailPage() {
       if (data.body) setEmailBody(data.body)
       toast.success('Email generated with AI')
     } catch {
-      const name = invoice.clients?.name || 'Client'
-      const num = invoice.invoice_number
-      const amount = fmt(invoice.total, invoice.currency)
-      const due = fmtDate(invoice.due_date)
-      const from = invoice.sender_company || invoice.sender_name || 'Invoice AI'
+      const name = target.clients?.name || 'Client'
+      const num = target.invoice_number
+      const amount = fmt(target.total, target.currency)
+      const due = fmtDate(target.due_date)
+      const from = target.sender_company || target.sender_name || 'Invoice AI'
       setEmailSubject(
         isReminder
-          ? `Payment Reminder: ${num} – ${amount} Overdue`
-          : `Invoice ${num} from ${invoice.sender_company || invoice.sender_name} – ${amount} Due`
+          ? `Payment Reminder: ${num} - ${amount} Overdue`
+          : `Invoice ${num} from ${target.sender_company || target.sender_name} - ${amount} Due`
       )
       setEmailBody(
         isReminder
@@ -370,6 +348,52 @@ export default function InvoiceDetailPage() {
     } finally {
       setGeneratingEmail(false)
     }
+  }
+
+  useEffect(() => {
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*, clients(*), invoice_items(*)')
+        .eq('id', params.id as string)
+        .single()
+      if (!error && data) setInvoice(data as FullInvoice)
+      setLoading(false)
+
+      // Auto-download if ?download=true
+      if (searchParams.get('download') === 'true') {
+        setTimeout(() => handleDownload(data as FullInvoice), 500)
+      }
+
+      // Auto-open the send dialog if ?send=true (e.g. from "Send Reminder"
+      // on the invoice list page). generateAIEmail() already prefills a
+      // reminder-toned subject/body when the invoice is unpaid, so the
+      // dialog isn't empty when it opens.
+      if (searchParams.get('send') === 'true') {
+        setSendDialog(true)
+        void generateAIEmail(data as FullInvoice)
+      }
+    }
+    // Re-run only when the invoice id in the URL changes. `handleDownload`,
+    // `searchParams`, and `supabase` are intentionally excluded: `supabase`
+    // is a fresh client each render, `searchParams` only matters on first
+    // load here, and `handleDownload` isn't memoized, including any of
+    // them would refire this fetch in a loop.
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id])
+
+  const updateStatus = async (status: InvoiceStatus) => {
+    if (!invoice) return
+    setActioning(true)
+    const { error } = await supabase.from('invoices').update({
+      status,
+      ...(status === 'paid' ? { paid_at: new Date().toISOString() } : {}),
+    }).eq('id', invoice.id)
+    if (error) { toast.error('Failed to update'); setActioning(false); return }
+    setInvoice(prev => prev ? { ...prev, status } : prev)
+    toast.success(`Marked as ${status}`)
+    setActioning(false)
   }
 
   const handleSend = async () => {
@@ -419,7 +443,7 @@ export default function InvoiceDetailPage() {
       }
       setSendDialog(false)
     } catch {
-      toast.error('Send failed — download the PDF and send manually')
+      toast.error('Send failed. Download the PDF and send manually')
     } finally {
       setActioning(false)
     }
@@ -565,7 +589,11 @@ export default function InvoiceDetailPage() {
           <div className="flex justify-between items-start">
             <div>
               {invoice.sender_logo_url ? (
-                <img src={invoice.sender_logo_url} alt="Logo" className="w-14 h-14 rounded-full object-cover mb-3" />
+                // Plain <img> is intentional: renders an arbitrary
+                // user-supplied logo URL, which next/image can't optimize
+                // without allow-listing every possible host up front.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={invoice.sender_logo_url} alt="Company logo" className="w-14 h-14 rounded-full object-cover mb-3" />
               ) : (
                 <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
                   <span className="text-gray-300 text-xs">Logo</span>
@@ -683,7 +711,8 @@ export default function InvoiceDetailPage() {
         <DialogContent className="bg-[#0a0a0a] border-[#FF0A54]/20 max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-serif text-xl text-white">
-              <RiMailLine className="w-5 h-5 text-[#FF0A54]" /> Send Invoice
+              <RiMailLine className="w-5 h-5 text-[#FF0A54]" />
+              {invoice.status === 'unpaid' ? 'Send Reminder' : 'Send Invoice'}
             </DialogTitle>
             <DialogDescription className="sr-only">
               Compose and send the invoice email to your client.
@@ -703,7 +732,7 @@ export default function InvoiceDetailPage() {
                 </div>
               </div>
             )}
-            <Button variant="outline" onClick={generateAIEmail} disabled={generatingEmail} className="w-full gap-2 bg-transparent border-[#FF0A54]/25 text-[#FF0A54] hover:bg-[#FF0A54]/10">
+            <Button variant="outline" onClick={() => generateAIEmail()} disabled={generatingEmail} className="w-full gap-2 bg-transparent border-[#FF0A54]/25 text-[#FF0A54] hover:bg-[#FF0A54]/10">
               {generatingEmail ? <><RiLoaderLine className="w-4 h-4 animate-spin" />Generating...</> : <><RiSparkling2Line className="w-4 h-4" />Generate Email with AI</>}
             </Button>
             <div>
@@ -719,7 +748,7 @@ export default function InvoiceDetailPage() {
             <Button variant="ghost" onClick={() => setSendDialog(false)} className="text-white/50 hover:text-white">Cancel</Button>
             <Button onClick={handleSend} disabled={actioning || !emailSubject} className="gap-2 bg-[#FF0A54] hover:bg-[#FF0A54]/90 text-white">
               {actioning ? <RiLoaderLine className="w-4 h-4 animate-spin" /> : <RiSendPlaneLine className="w-4 h-4" />}
-              Send Invoice
+              {invoice.status === 'unpaid' ? 'Send Reminder' : 'Send Invoice'}
             </Button>
           </DialogFooter>
         </DialogContent>
