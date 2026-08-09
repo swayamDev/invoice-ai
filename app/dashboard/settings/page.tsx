@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ChangeEvent } from 'react'
 import {
   RiSaveLine,
   RiLogoutBoxLine,
@@ -12,6 +12,8 @@ import {
   RiCheckLine,
   RiReceiptLine,
   RiImageLine,
+  RiUploadCloud2Line,
+  RiCloseLine,
 } from 'react-icons/ri'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +30,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { fileToResizedDataUrl, validateImageFile, LogoUploadError } from '@/lib/logo-upload'
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'INR', 'JPY', 'SGD']
 const TERMS = ['7', '14', '30', '45', '60', '90']
@@ -59,6 +62,7 @@ export default function SettingsPage() {
   const [businessPhone, setBusinessPhone] = useState('')
   const [businessAddress, setBusinessAddress] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
+  const [logoUploading, setLogoUploading] = useState(false)
 
   // Invoice
   const [currency, setCurrency] = useState('USD')
@@ -106,8 +110,32 @@ export default function SettingsPage() {
       }
       setLoading(false)
     }
+    // Fetch-on-mount: intentionally run once when the page loads to hydrate
+    // the form from the user's saved profile. `router`/`supabase` are
+    // stable-enough for this one-time load; adding them to deps would
+    // refire the effect on every render since `supabase` is re-created
+    // each render (see createSupabase() above).
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleLogoFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    // Reset the input so choosing the same file again still fires onChange.
+    e.target.value = ''
+    if (!file) return
+
+    try {
+      validateImageFile(file)
+      setLogoUploading(true)
+      const dataUrl = await fileToResizedDataUrl(file, { maxDimension: 256, quality: 0.85 })
+      setLogoUrl(dataUrl)
+    } catch (err) {
+      toast.error(err instanceof LogoUploadError ? err.message : 'Could not process that image.')
+    } finally {
+      setLogoUploading(false)
+    }
+  }
 
   const saveProfile = async () => {
     setSaving(true)
@@ -224,7 +252,7 @@ export default function SettingsPage() {
         })}
       </div>
 
-      {/* ── Profile Tab ── */}
+      {/* ==== Profile Tab ==== */}
       {activeTab === 'profile' && (
         <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-6 space-y-6">
           <div className="flex items-center gap-4">
@@ -264,7 +292,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ── Company Tab ── */}
+      {/* ==== Company Tab ==== */}
       {activeTab === 'company' && (
         <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-6 space-y-5">
           <div>
@@ -273,16 +301,57 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <Label htmlFor="company-logo-url" className="text-white/50 text-xs uppercase tracking-wider">Logo URL</Label>
-            <div className="flex gap-3 mt-1.5">
-              <div className="w-12 h-12 rounded-full bg-[#111] border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+            <Label className="text-white/50 text-xs uppercase tracking-wider">Company Logo</Label>
+            <div className="flex items-center gap-4 mt-1.5">
+              <div className="w-16 h-16 rounded-full bg-[#111] border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {logoUrl
-                  ? <img src={logoUrl} alt="logo" className="w-full h-full object-cover" />
-                  : <RiImageLine className="w-5 h-5 text-white/20" />}
+                  // Plain <img> is intentional: this now renders a local
+                  // data: URL produced by fileToResizedDataUrl(), not a
+                  // remote host, so next/image's host allow-listing
+                  // doesn't apply here anyway.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={logoUrl} alt="Company logo" className="w-full h-full object-cover" />
+                  : <RiImageLine className="w-6 h-6 text-white/20" />}
               </div>
-              <Input id="company-logo-url" name="logo_url" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://your-logo-url.com/logo.png" className={fieldClass} />
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="company-logo-file"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-sm font-medium cursor-pointer transition-colors"
+                  >
+                    {logoUploading ? (
+                      <RiLoaderLine className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RiUploadCloud2Line className="w-4 h-4" />
+                    )}
+                    {logoUploading ? 'Processing...' : logoUrl ? 'Change photo' : 'Upload photo'}
+                  </label>
+                  <input
+                    id="company-logo-file"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoFileChange}
+                    disabled={logoUploading}
+                    className="hidden"
+                  />
+                  {logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoUrl('')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 text-sm transition-colors"
+                    >
+                      <RiCloseLine className="w-4 h-4" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-white/25 text-xs">
+                  Upload a photo from your device (PNG, JPG, WEBP, up to 8MB). It&apos;s resized
+                  and stored with your profile, so it works even offline.
+                </p>
+              </div>
             </div>
-            <p className="text-white/25 text-xs mt-1">Enter a public image URL for your logo</p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
@@ -313,7 +382,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ── Invoice Defaults Tab ── */}
+      {/* ==== Invoice Defaults Tab ==== */}
       {activeTab === 'invoice' && (
         <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-6 space-y-5">
           <div>
@@ -380,7 +449,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ── Notifications Tab ── */}
+      {/* ==== Notifications Tab ==== */}
       {activeTab === 'notifications' && (
         <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-6 space-y-5">
           <div>
@@ -417,7 +486,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ── Security Tab ── */}
+      {/* ==== Security Tab ==== */}
       {activeTab === 'security' && (
         <div className="space-y-4">
           <div className="bg-[#0a0a0a] border border-white/8 rounded-xl p-6 space-y-4">
