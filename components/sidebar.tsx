@@ -88,7 +88,13 @@ export function Sidebar({ className }: SidebarProps) {
     router.refresh();
   };
 
-  const SidebarContent = () => (
+  // NOTE: this used to be defined as a `SidebarContent` component created
+  // inside `Sidebar`'s render body. Defining a component during render is
+  // an anti-pattern (React remounts it, and resets its state, on every
+  // re-render of the parent). Since this markup doesn't need its own
+  // component identity, it's just a JSX value reused for the mobile and
+  // desktop layouts below.
+  const sidebarContent = (
     <>
       <div
         className={cn(
@@ -226,7 +232,7 @@ export function Sidebar({ className }: SidebarProps) {
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <SidebarContent />
+        {sidebarContent}
       </div>
 
       <div
@@ -244,7 +250,7 @@ export function Sidebar({ className }: SidebarProps) {
             <RiArrowRightSLine className="w-3 h-3" />
           </button>
         )}
-        <SidebarContent />
+        {sidebarContent}
       </div>
 
       <div

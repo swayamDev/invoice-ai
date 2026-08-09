@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,9 +46,6 @@ export default function SignUp() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const formDataRef = useRef(formData);
-  formDataRef.current = formData;
-
   const passwordStrength = useMemo(
     () => getPasswordStrength(formData.password),
     [formData.password],
@@ -65,7 +62,7 @@ export default function SignUp() {
 
   const handleBlur = (name: string) => {
     setTouched((prev) => ({ ...prev, [name]: true }));
-    validateField(name, formDataRef.current);
+    validateField(name, formData);
   };
 
   const validateField = (name: string, data: typeof formData) => {
