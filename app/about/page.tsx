@@ -18,7 +18,7 @@ export default function AboutPage() {
         </div>
         <h1 className="font-serif text-4xl font-bold text-white mb-6">About Us</h1>
         <div className="space-y-6 text-white/50 leading-relaxed text-sm">
-          <p>Invoice AI is built for freelancers and agencies who are tired of chasing payments. We believe billing should be effortless — so you can focus on the work that matters.</p>
+          <p>Invoice AI is built for freelancers and agencies who are tired of chasing payments. We believe billing should be effortless, so you can focus on the work that matters.</p>
           <p>Founded in 2024, our team is laser-focused on making invoicing intelligent. From AI-generated invoice drafts to automated payment reminders, every feature is designed to save time and get you paid faster.</p>
           <p>We&apos;re a remote-first company serving thousands of businesses across 60+ countries.</p>
         </div>

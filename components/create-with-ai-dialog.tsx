@@ -27,7 +27,7 @@ interface Props {
 const examples = [
   'Built a landing page with React and Stripe for Acme Corp. 15 hours at $150/hr. Due in 14 days.',
   'Logo design and brand kit for StartUp Inc. Flat rate $2,500. Client: jane@startup.com',
-  'Monthly retainer for SEO and content — 10 blog posts + keyword research. $1,800/month.',
+  'Monthly retainer for SEO and content: 10 blog posts + keyword research. $1,800/month.',
 ]
 
 export function CreateWithAIDialog({ open, onOpenChange }: Props) {

@@ -28,7 +28,7 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Refresh session — required for Server Components to stay in sync
+  // Refresh session, required for Server Components to stay in sync
   const {
     data: { user },
   } = await supabase.auth.getUser();

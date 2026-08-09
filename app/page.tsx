@@ -413,7 +413,7 @@ function RevenueSection() {
             </h2>
             <p className="text-white/45 text-sm leading-relaxed">
               Stop chasing payments. Our intelligent dashboard shows exactly who
-              owes what, when it is due, and how to follow up — automatically.
+              owes what, when it is due, and how to follow up automatically.
             </p>
             <ul className="space-y-3.5">
               {[
@@ -624,7 +624,7 @@ function Footer() {
             <div className="w-2 h-2 rounded-full bg-[#FF0A54] animate-pulse" />
 
             <a
-              href="https://swayam.io"
+              href="https://swayam.space"
               target="_blank"
               rel="noopener noreferrer"
               className="text-white/30 text-xs tracking-wide hover:text-[#FF0A54] transition-colors"

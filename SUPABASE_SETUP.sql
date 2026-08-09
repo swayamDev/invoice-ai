@@ -3,14 +3,14 @@
 -- Run this entire script in your Supabase SQL Editor
 -- =============================================================
 
--- ─── Drop existing tables if re-running ───
+-- ==== Drop existing tables if re-running ====
 DROP TABLE IF EXISTS public.activity_log CASCADE;
 DROP TABLE IF EXISTS public.invoice_items CASCADE;
 DROP TABLE IF EXISTS public.invoices CASCADE;
 DROP TABLE IF EXISTS public.clients CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
 
--- ─── Profiles ───────────────────────────────────────────────
+-- ==== Profiles ====
 CREATE TABLE public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
@@ -29,7 +29,7 @@ CREATE TABLE public.profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ─── Clients ────────────────────────────────────────────────
+-- ==== Clients ====
 -- NOTE: references auth.users directly (not profiles) so inserts
 -- work even before profile is fully populated
 CREATE TABLE public.clients (
@@ -46,7 +46,7 @@ CREATE TABLE public.clients (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ─── Invoices ───────────────────────────────────────────────
+-- ==== Invoices ====
 CREATE TABLE public.invoices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -75,7 +75,7 @@ CREATE TABLE public.invoices (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ─── Invoice Items ──────────────────────────────────────────
+-- ==== Invoice Items ====
 CREATE TABLE public.invoice_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_id UUID NOT NULL REFERENCES public.invoices(id) ON DELETE CASCADE,
@@ -86,7 +86,7 @@ CREATE TABLE public.invoice_items (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ─── Activity Log ───────────────────────────────────────────
+-- ==== Activity Log ====
 CREATE TABLE public.activity_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -96,14 +96,14 @@ CREATE TABLE public.activity_log (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ─── Enable Row Level Security ──────────────────────────────
+-- ==== Enable Row Level Security ====
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoice_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_log ENABLE ROW LEVEL SECURITY;
 
--- ─── RLS Policies: Profiles ─────────────────────────────────
+-- ==== RLS Policies: Profiles ====
 CREATE POLICY "profiles_select" ON public.profiles
   FOR SELECT USING (auth.uid() = id);
 
@@ -113,7 +113,7 @@ CREATE POLICY "profiles_insert" ON public.profiles
 CREATE POLICY "profiles_update" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
--- ─── RLS Policies: Clients ──────────────────────────────────
+-- ==== RLS Policies: Clients ====
 CREATE POLICY "clients_select" ON public.clients
   FOR SELECT USING (auth.uid() = user_id);
 
@@ -126,7 +126,7 @@ CREATE POLICY "clients_update" ON public.clients
 CREATE POLICY "clients_delete" ON public.clients
   FOR DELETE USING (auth.uid() = user_id);
 
--- ─── RLS Policies: Invoices ─────────────────────────────────
+-- ==== RLS Policies: Invoices ====
 CREATE POLICY "invoices_select" ON public.invoices
   FOR SELECT USING (auth.uid() = user_id);
 
@@ -139,7 +139,7 @@ CREATE POLICY "invoices_update" ON public.invoices
 CREATE POLICY "invoices_delete" ON public.invoices
   FOR DELETE USING (auth.uid() = user_id);
 
--- ─── RLS Policies: Invoice Items ────────────────────────────
+-- ==== RLS Policies: Invoice Items ====
 CREATE POLICY "invoice_items_select" ON public.invoice_items
   FOR SELECT USING (
     EXISTS (
@@ -176,14 +176,14 @@ CREATE POLICY "invoice_items_delete" ON public.invoice_items
     )
   );
 
--- ─── RLS Policies: Activity Log ─────────────────────────────
+-- ==== RLS Policies: Activity Log ====
 CREATE POLICY "activity_log_select" ON public.activity_log
   FOR SELECT USING (auth.uid() = user_id);
 
 CREATE POLICY "activity_log_insert" ON public.activity_log
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- ─── Auto-create profile on signup ──────────────────────────
+-- ==== Auto-create profile on signup ====
 -- This is the KEY fix: profile is created automatically when a
 -- user signs up, so all FK references work immediately.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -210,7 +210,7 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- ─── Auto-update updated_at timestamps ──────────────────────
+-- ==== Auto-update updated_at timestamps ====
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -233,7 +233,7 @@ CREATE TRIGGER invoices_updated_at
   BEFORE UPDATE ON public.invoices
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- ─── Indexes for performance ─────────────────────────────────
+-- ==== Indexes for performance ====
 CREATE INDEX idx_clients_user_id ON public.clients(user_id);
 CREATE INDEX idx_invoices_user_id ON public.invoices(user_id);
 CREATE INDEX idx_invoices_client_id ON public.invoices(client_id);
@@ -241,11 +241,11 @@ CREATE INDEX idx_invoices_status ON public.invoices(status);
 CREATE INDEX idx_invoice_items_invoice_id ON public.invoice_items(invoice_id);
 CREATE INDEX idx_activity_log_user_id ON public.activity_log(user_id);
 
--- ─── Done! ───────────────────────────────────────────────────
+-- ==== Done! ====
 -- Your database is now ready. Tables created:
--- ✅ profiles (auto-created on signup via trigger)
--- ✅ clients  (references auth.users directly)
--- ✅ invoices (full schema with all columns)
--- ✅ invoice_items (with cascade delete)
--- ✅ activity_log
+-- - profiles (auto-created on signup via trigger)
+-- - clients  (references auth.users directly)
+-- - invoices (full schema with all columns)
+-- - invoice_items (with cascade delete)
+-- - activity_log
 -- All RLS policies, indexes, and triggers configured.
