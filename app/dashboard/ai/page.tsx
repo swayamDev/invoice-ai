@@ -211,17 +211,17 @@ export default function AIPage() {
           <RiSparkling2Line className="w-4 h-4 text-[#FF0A54]" /> Tips for
           better results
         </p>
-        <ul className="text-white/45 text-xs space-y-1.5">
+        <ul className="text-white/45 text-xs space-y-1.5 list-disc list-inside marker:text-[#FF0A54]/40">
           <li>
-            • Be specific: include project name, hours, technologies, and client
+            Be specific: include project name, hours, technologies, and client
             name
           </li>
-          <li>• Include amounts and due dates for emails and reminders</li>
+          <li>Include amounts and due dates for emails and reminders</li>
           <li>
-            • Describe your typical work and client type for payment terms
+            Describe your typical work and client type for payment terms
           </li>
           <li>
-            • Generated content is a starting point — always review before
+            Generated content is a starting point. Always review before
             sending
           </li>
         </ul>

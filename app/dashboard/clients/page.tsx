@@ -52,8 +52,7 @@ import { createClient as createSupabase } from "@/lib/supabase/client";
 import type { Client } from "@/lib/database.types";
 import Link from "next/link";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
+// ==== Constants ====
 const AVATAR_COLORS = [
   "bg-purple-500",
   "bg-orange-500",
@@ -70,8 +69,7 @@ const BLANK = { name: "", email: "", phone: "", company: "", address: "" };
 type ViewMode = "grid" | "list";
 type FormState = typeof BLANK;
 
-// ─── Pure helpers (stable — never recreated) ─────────────────────────────────
-
+// ==== Pure helpers (stable, never recreated) ====
 const getColor = (name: string) =>
   AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 
@@ -83,10 +81,10 @@ const getInitials = (name: string) =>
     .toUpperCase()
     .slice(0, 2);
 
-// ─── ClientForm — hoisted OUTSIDE parent so it never remounts on re-render ───
+// ==== ClientForm, hoisted OUTSIDE parent so it never remounts on re-render ====
 // If defined inside ClientsPage, every keystroke re-renders the parent which
-// recreates ClientForm as a new component type → React unmounts + remounts it
-// → focused input loses focus after every single character typed.
+// recreates ClientForm as a new component type, so React unmounts and remounts it.
+// The focused input loses focus after every single character typed.
 
 interface ClientFormProps {
   form: FormState;
@@ -170,8 +168,7 @@ function ClientForm({ form, onChange }: ClientFormProps) {
   );
 }
 
-// ─── ActionMenu — also hoisted outside to avoid identity churn ───────────────
-
+// ==== ActionMenu, also hoisted outside to avoid identity churn ====
 interface ActionMenuProps {
   client: Client;
   onEdit: (client: Client) => void;
@@ -217,8 +214,7 @@ function ActionMenu({ client, onEdit, onDelete }: ActionMenuProps) {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
-
+// ==== Main page ====
 export default function ClientsPage() {
   const supabase = createSupabase();
   const [clients, setClients] = useState<Client[]>([]);
@@ -233,7 +229,7 @@ export default function ClientsPage() {
   const [page, setPage] = useState(1);
   const PER_PAGE = 10;
 
-  // Stable patch helper — spreads only the changed keys
+  // Stable patch helper, spreads only the changed keys
   const patchForm = (patch: Partial<FormState>) =>
     setForm((prev) => ({ ...prev, ...patch }));
 
@@ -256,7 +252,11 @@ export default function ClientsPage() {
   };
 
   useEffect(() => {
+    // Fetch-on-mount: intentionally run once. `loadClients` isn't memoized,
+    // so including it in deps would refire this effect every render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(
@@ -560,7 +560,7 @@ export default function ClientsPage() {
                           {client.company}
                         </div>
                       ) : (
-                        <span className="text-white/20">—</span>
+                        <span className="text-white/20">-</span>
                       )}
                     </td>
                     <td className="py-3.5 px-5 text-white/40 text-xs max-w-32 truncate">
@@ -570,7 +570,7 @@ export default function ClientsPage() {
                           {client.address}
                         </div>
                       ) : (
-                        <span className="text-white/20">—</span>
+                        <span className="text-white/20">-</span>
                       )}
                     </td>
                     <td className="py-3.5 px-5 text-white/40 text-xs whitespace-nowrap">
@@ -605,7 +605,7 @@ export default function ClientsPage() {
       {filtered.length > PER_PAGE && (
         <div className="flex items-center justify-between text-sm text-white/40">
           <span>
-            Showing {(page - 1) * PER_PAGE + 1}–
+            Showing {(page - 1) * PER_PAGE + 1}-
             {Math.min(page * PER_PAGE, filtered.length)} of {filtered.length}{" "}
             clients
           </span>
