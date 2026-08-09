@@ -1,9 +1,9 @@
 // =============================================================
-// INVOICE AI — Responsive Email Templates
+// INVOICE AI: Responsive Email Templates
 // Used by /app/api/invoices/send/route.ts
 // =============================================================
 
-interface InvoiceEmailData {
+export interface InvoiceEmailData {
   type: 'invoice' | 'reminder' | 'receipt'
   invoiceNumber: string
   invoiceId: string
@@ -29,12 +29,27 @@ interface InvoiceEmailData {
   appUrl?: string
 }
 
+// All the string fields below (client name, notes, line item descriptions,
+// AI-drafted body, etc.) originate from user input and get interpolated
+// directly into an HTML email. Without escaping, a client name like
+// `<img src=x onerror=...>` would execute in any email client that renders
+// HTML. Escape everything before it goes into a template literal.
+export function escapeHtml(input: unknown): string {
+  const str = String(input ?? '')
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function fmt(amount: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
 function fmtDate(dateStr: string): string {
-  if (!dateStr) return '—'
+  if (!dateStr) return '-'
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -45,12 +60,6 @@ function fmtDate(dateStr: string): string {
 export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
   const {
     type,
-    invoiceNumber,
-    clientName,
-    senderName,
-    senderCompany,
-    senderEmail,
-    senderAddress,
     issueDate,
     dueDate,
     currency,
@@ -59,12 +68,25 @@ export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
     taxAmount,
     discount,
     total,
-    items,
-    notes,
-    body,
-    appName = 'Invoice AI',
+    items: rawItems,
     appUrl = 'https://invoice-ai.vercel.app',
   } = data
+
+  // Escape every user-controlled string before it's interpolated into HTML.
+  const invoiceNumber = escapeHtml(data.invoiceNumber)
+  const clientName = escapeHtml(data.clientName)
+  const clientEmail = escapeHtml(data.clientEmail)
+  const senderName = escapeHtml(data.senderName)
+  const senderCompany = data.senderCompany ? escapeHtml(data.senderCompany) : data.senderCompany
+  const senderEmail = escapeHtml(data.senderEmail)
+  const senderAddress = data.senderAddress ? escapeHtml(data.senderAddress) : data.senderAddress
+  const notes = data.notes ? escapeHtml(data.notes) : data.notes
+  const body = escapeHtml(data.body)
+  const appName = escapeHtml(data.appName || 'Invoice AI')
+  const items = rawItems.map((item) => ({
+    ...item,
+    description: escapeHtml(item.description),
+  }))
 
   const accentColor = type === 'reminder' ? '#ef4444' : type === 'receipt' ? '#10b981' : '#FF0A54'
   const badgeText =
@@ -107,7 +129,7 @@ export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>${invoiceNumber} — ${appName}</title>
+  <title>${invoiceNumber} - ${appName}</title>
   <!--[if mso]>
   <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
   <![endif]-->
@@ -127,7 +149,7 @@ export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
         <!-- Email container -->
         <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;margin:0 auto;">
 
-          <!-- ─── Header ─── -->
+          <!-- Header -->
           <tr>
             <td>
               <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
@@ -139,7 +161,7 @@ export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
                       <tr>
                         <td style="vertical-align:middle;">
                           <div style="width:40px;height:40px;background-color:${accentColor};border-radius:10px;display:inline-flex;align-items:center;justify-content:center;margin-right:10px;vertical-align:middle;">
-                            <span style="color:white;font-size:20px;line-height:1;">✦</span>
+                            <span style="color:white;font-size:18px;font-weight:800;line-height:1;">${appName.charAt(0).toUpperCase()}</span>
                           </div>
                         </td>
                         <td style="vertical-align:middle;padding-left:10px;">
@@ -172,7 +194,7 @@ export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
             </td>
           </tr>
 
-          <!-- ─── Body card ─── -->
+          <!-- Body card -->
           <tr>
             <td style="background:#ffffff;padding:0 40px;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
 
@@ -205,7 +227,7 @@ export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
                   <td width="50%" style="vertical-align:top;padding-left:32px;">
                     <p style="margin:0 0 8px;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">To</p>
                     <p style="margin:0 0 2px;color:#1e293b;font-size:14px;font-weight:700;">${clientName}</p>
-                    <p style="margin:0;color:#64748b;font-size:13px;">${data.clientEmail}</p>
+                    <p style="margin:0;color:#64748b;font-size:13px;">${clientEmail}</p>
                   </td>
                 </tr>
               </table>
@@ -285,7 +307,7 @@ export function buildInvoiceEmailHtml(data: InvoiceEmailData): string {
             </td>
           </tr>
 
-          <!-- ─── Footer ─── -->
+          <!-- Footer -->
           <tr>
             <td style="background:#f1f5f9;border-radius:0 0 16px 16px;padding:28px 40px;text-align:center;">
               <p style="margin:0 0 6px;color:#64748b;font-size:12px;line-height:1.6;">
@@ -328,7 +350,7 @@ export function buildInvoiceEmailText(data: InvoiceEmailData): string {
     body,
   } = data
 
-  const separator = '─'.repeat(48)
+  const separator = '-'.repeat(48)
   const itemLines = items
     .filter((i) => i.description)
     .map((i) => `  ${i.description.padEnd(28)} ${String(i.quantity).padStart(4)} × ${fmt(i.rate, currency).padStart(10)}  ${fmt(i.amount, currency).padStart(12)}`)
