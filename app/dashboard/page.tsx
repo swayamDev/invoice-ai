@@ -40,7 +40,7 @@ type InvoiceWithClient = Invoice & { clients?: Client }
 const fmt = (v: number, cur = 'USD') =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(v)
 const fmtDate = (s: string) =>
-  s ? new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+  s ? new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'
 const getInitials = (name: string) => name?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?'
 const COLORS = ['bg-purple-500','bg-orange-500','bg-teal-500','bg-indigo-500','bg-pink-500','bg-emerald-500']
 const getColor = (name = '') => COLORS[name.charCodeAt(0) % COLORS.length]
@@ -93,7 +93,11 @@ export default function Dashboard() {
       if (profile) setUserName(profile.full_name || profile.business_name || user.email?.split('@')[0] || '')
       setLoading(false)
     }
+    // Fetch-on-mount: intentionally run once. `supabase` is a fresh client
+    // instance each render (see createSupabase() above) so including it in
+    // deps would refire this effect every render.
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const updateStatus = async (id: string, status: InvoiceStatus) => {
@@ -157,10 +161,10 @@ export default function Dashboard() {
           const Icon = s.icon
           return (
             <div key={s.label} className="bg-[#0a0a0a] border border-white/8 rounded-xl p-4 sm:p-5 hover:border-white/15 transition-colors">
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-white/40 text-xs mb-2">{s.label}</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-white">{s.value}</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white truncate">{s.value}</p>
                 </div>
                 <div className={`w-10 h-10 rounded-lg ${s.bg} flex items-center justify-center flex-shrink-0`}>
                   <Icon className={`w-5 h-5 ${s.color}`} />
@@ -272,7 +276,7 @@ export default function Dashboard() {
                             {getInitials(inv.clients?.name || '')}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-white/70 text-sm truncate max-w-24">{inv.clients?.name || '—'}</span>
+                        <span className="text-white/70 text-sm truncate max-w-24">{inv.clients?.name || '-'}</span>
                       </div>
                     </td>
                     <td className="py-3.5 px-4 sm:px-5 text-white/40 text-sm hidden sm:table-cell">{fmtDate(inv.issue_date)}</td>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   RiSearchLine,
   RiAddLine,
@@ -57,7 +58,7 @@ const fmtDate = (s: string) =>
         day: "numeric",
         year: "numeric",
       })
-    : "—";
+    : "-";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-white/8 text-white/50",
@@ -93,6 +94,7 @@ const STATUSES: Array<InvoiceStatus | "all"> = [
 
 export default function InvoicesPage() {
   const supabase = createSupabase();
+  const router = useRouter();
 
   const [invoices, setInvoices] = useState<InvoiceWithClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,7 +127,13 @@ export default function InvoicesPage() {
   };
 
   useEffect(() => {
+    // Fetch-on-mount: intentionally run once when the page loads. This is
+    // the standard "load initial data" pattern, including `loadInvoices`
+    // in the deps array would redefine it every render (it's not memoized)
+    // and refire the effect in a loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(() => {
@@ -233,9 +241,11 @@ export default function InvoicesPage() {
     toast.success("Invoice deleted");
   };
 
-  const downloadPDF = async (inv: InvoiceWithClient) => {
-    // Navigate to invoice detail with download trigger
-    window.location.href = `/dashboard/invoices/${inv.id}?download=true`;
+  const downloadPDF = (inv: InvoiceWithClient) => {
+    // Navigate to invoice detail with download trigger. Use the router
+    // instead of window.location.href so this stays a client-side
+    // navigation (no full page reload).
+    router.push(`/dashboard/invoices/${inv.id}?download=true`);
   };
 
   return (
@@ -258,10 +268,10 @@ export default function InvoicesPage() {
         ].map((s) => (
           <div
             key={s.label}
-            className="bg-[#0a0a0a] border border-white/8 rounded-xl p-4"
+            className="bg-[#0a0a0a] border border-white/8 rounded-xl p-4 min-w-0"
           >
             <p className="text-white/40 text-xs mb-1">{s.label}</p>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+            <p className={`text-xl sm:text-2xl font-bold truncate ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -395,7 +405,7 @@ export default function InvoicesPage() {
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-white/80 text-sm truncate max-w-28">
-                          {inv.clients?.name || "—"}
+                          {inv.clients?.name || "-"}
                         </span>
                       </div>
                     </td>
@@ -449,7 +459,12 @@ export default function InvoicesPage() {
                           )}
                           {inv.status === "unpaid" && (
                             <>
-                              <DropdownMenuItem className="text-white/60 hover:text-white focus:text-white focus:bg-white/5 gap-2 cursor-pointer">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(`/dashboard/invoices/${inv.id}?send=true`)
+                                }
+                                className="text-white/60 hover:text-white focus:text-white focus:bg-white/5 gap-2 cursor-pointer"
+                              >
                                 <RiBellLine className="w-4 h-4" /> Send Reminder
                               </DropdownMenuItem>
                               <DropdownMenuItem
@@ -494,7 +509,7 @@ export default function InvoicesPage() {
       {filtered.length > PER_PAGE && (
         <div className="flex items-center justify-between text-sm text-white/40">
           <span>
-            Showing {(page - 1) * PER_PAGE + 1}–
+            Showing {(page - 1) * PER_PAGE + 1}-
             {Math.min(page * PER_PAGE, filtered.length)} of {filtered.length}
           </span>
           <div className="flex items-center gap-1.5">
