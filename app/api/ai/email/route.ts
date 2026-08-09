@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireUser } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
+  // Auth + rate limit: same reasoning as /api/ai/generate, this hits a
+  // paid OpenAI endpoint and must not be publicly callable.
+  const auth = await requireUser('ai-email', 20, 10 * 60 * 1000)
+  if (!auth.ok) return auth.response
+
   try {
     const {
       clientName,
@@ -17,11 +23,11 @@ export async function POST(req: NextRequest) {
     // Always provide a solid fallback
     const fallback = {
       subject: isReminder
-        ? `Payment Reminder: ${invoiceNumber} – ${amount} Overdue`
-        : `Invoice ${invoiceNumber} from ${senderCompany || senderName} – ${amount} Due`,
+        ? `Payment Reminder: ${invoiceNumber} - ${amount} Overdue`
+        : `Invoice ${invoiceNumber} from ${senderCompany || senderName} - ${amount} Due`,
       body: isReminder
         ? `Dear ${clientName || 'Valued Client'},\n\nI hope this message finds you well. I'm writing to follow up on invoice ${invoiceNumber} for ${amount}, which was due on ${dueDate}.\n\nCould you please let us know when we can expect payment, or reach out if there are any issues we can help resolve?\n\nThank you for your prompt attention to this matter.\n\nBest regards,\n${senderName || senderCompany}`
-        : `Dear ${clientName || 'Valued Client'},\n\nPlease find invoice ${invoiceNumber} for ${amount} attached to this email.\n\nPayment is due by ${dueDate}. If you have any questions about the services or the invoice, please don't hesitate to get in touch.\n\nThank you for your continued business — it's truly appreciated!\n\nWarm regards,\n${senderName || senderCompany}`,
+        : `Dear ${clientName || 'Valued Client'},\n\nPlease find invoice ${invoiceNumber} for ${amount} attached to this email.\n\nPayment is due by ${dueDate}. If you have any questions about the services or the invoice, please don't hesitate to get in touch.\n\nThank you for your continued business, it's truly appreciated!\n\nWarm regards,\n${senderName || senderCompany}`,
     }
 
     const apiKey = process.env.OPENAI_API_KEY

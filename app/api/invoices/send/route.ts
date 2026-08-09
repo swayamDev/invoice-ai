@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildInvoiceEmailHtml, buildInvoiceEmailText } from '@/lib/email-templates'
+import { requireUser } from '@/lib/api-auth'
+import { readEmailEnvVar, readEnvVar } from '@/lib/env'
 
 export async function POST(req: NextRequest) {
+  // Auth + rate limit: this route sends real email through Resend using
+  // this project's account. Without auth it's an open relay anyone on the
+  // internet could use to spam arbitrary addresses. 10 sends / 5 min per
+  // user comfortably covers real usage (invoice + reminder + receipt).
+  const auth = await requireUser('invoices-send', 10, 5 * 60 * 1000)
+  if (!auth.ok) return auth.response
+
   try {
     const payload = await req.json()
     const {
@@ -33,16 +42,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing recipient or subject' }, { status: 400 })
     }
 
-    const resendKey = process.env.RESEND_API_KEY
+    const resendKey = readEnvVar('RESEND_API_KEY')
     if (!resendKey) {
-      console.log(`[Invoice Send] No RESEND_API_KEY — would email ${to}: "${subject}"`)
+      console.log(`[Invoice Send] No RESEND_API_KEY, would email ${to}: "${subject}"`)
       return NextResponse.json({
         success: true,
-        note: 'Invoice saved. Email not sent — configure RESEND_API_KEY to enable email sending.',
+        note: 'Invoice saved. Email not sent, configure RESEND_API_KEY to enable email sending.',
       })
     }
 
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'invoices@yourdomain.com'
+    const fromEmail = readEmailEnvVar('RESEND_FROM_EMAIL', 'invoices@yourdomain.com')
     const fromName = senderCompany || senderName || 'Invoice AI'
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://invoice-ai.vercel.app'
 

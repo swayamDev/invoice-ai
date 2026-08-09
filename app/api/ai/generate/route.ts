@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireUser } from '@/lib/api-auth'
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   invoice: `You are a professional invoice writer. Given a description of work done, generate clean professional line item descriptions suitable for an invoice.
@@ -47,14 +48,20 @@ const FALLBACKS: Record<string, string> = {
     body: 'Please find your invoice attached for the services rendered. Payment is due by the date specified on the invoice. Please do not hesitate to reach out if you have any questions. Thank you for your business.',
   }),
   reminder: JSON.stringify({
-    subject: 'Payment Reminder — Invoice Overdue',
+    subject: 'Payment Reminder: Invoice Overdue',
     body: 'This is a friendly reminder that your invoice is now overdue. Please arrange payment at your earliest convenience. If you have already processed this payment, please disregard this notice. Contact us if you have any questions.',
   }),
   terms:
-    '• Payment is due within the number of days specified on the invoice from the issue date\n• Late payments are subject to a 1.5% monthly interest charge (18% per annum)\n• Accepted payment methods: bank transfer, credit/debit card, PayPal, or check\n• All disputes or discrepancies must be raised in writing within 7 days of invoice receipt\n• Returned or failed payments are subject to a $35 processing fee',
+    'Payment is due within the number of days specified on the invoice from the issue date.\nLate payments are subject to a 1.5% monthly interest charge (18% per annum).\nAccepted payment methods: bank transfer, credit/debit card, PayPal, or check.\nAll disputes or discrepancies must be raised in writing within 7 days of invoice receipt.\nReturned or failed payments are subject to a $35 processing fee.',
 }
 
 export async function POST(req: NextRequest) {
+  // Auth + rate limit: this route calls a paid OpenAI API, so it must
+  // never be reachable by an unauthenticated caller. 20 requests / 10 min
+  // per user is generous for interactive use and cheap to abuse-proof.
+  const auth = await requireUser('ai-generate', 20, 10 * 60 * 1000)
+  if (!auth.ok) return auth.response
+
   try {
     const { type, input } = await req.json()
 
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) {
-      console.log('[AI] No OPENAI_API_KEY — returning fallback for type:', type)
+      console.log('[AI] No OPENAI_API_KEY, returning fallback for type:', type)
       return NextResponse.json({ output: FALLBACKS[type] || '' })
     }
 
